@@ -1,0 +1,10 @@
+{
+  "name": "Viveiro Daniel",
+  "short_name": "Viveiros",
+  "description": "Controle zootécnico simples de viveiros de camarão.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f7",
+  "theme_color": "#0f766e",
+  "lang": "pt-BR"
+}
