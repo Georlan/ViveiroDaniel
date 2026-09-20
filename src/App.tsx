@@ -144,7 +144,7 @@ function Dashboard({
       <div className="pond-list">
         {ponds.map((pond) => {
           const history = calculateHistory(pond)
-          const latest = history.at(-1)
+          const latest = history[history.length - 1]
           return (
             <button className="pond-card" key={pond.id} onClick={() => onOpen(pond.id)}>
               <div className="pond-card-head">
@@ -184,7 +184,7 @@ function Dashboard({
 
 function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => void }) {
   const history = calculateHistory(pond)
-  const latest = history.at(-1)
+  const latest = history[history.length - 1]
 
   return (
     <section className="page detail-page">
@@ -414,7 +414,7 @@ function BiometryForm({
     accumulatedFeedKg: '',
   })
 
-  const previousWeight = useMemo(() => calculateHistory(pond).at(-1)?.currentWeightG ?? null, [pond])
+  const previousWeight = useMemo(() => calculateHistory(pond).slice(-1)[0]?.currentWeightG ?? null, [pond])
   const parsed: BiometryInput | null =
     form.date && Number(form.currentWeightG) > 0 && Number(form.feedRatePercent) > 0
       ? {
