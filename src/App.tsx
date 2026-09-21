@@ -1,7 +1,15 @@
 import { FormEvent, useMemo, useState } from 'react'
-import { calculateBiometry, calculateHistory, densityPerSquareMeter, preparationDays, round } from './domain/calculations'
+import {
+  calculateBiometry,
+  calculateHistory,
+  cultivationDaysAtReference,
+  cycleDaysAtReference,
+  densityPerSquareMeter,
+  preparationDays,
+  round,
+} from './domain/calculations'
 import { reportPonds } from './data/reportData'
-import type { BiometryInput, Pond } from './types'
+import type { BiometryInput, PlannedBiometry, Pond } from './types'
 
 const STORAGE_KEY = 'viveiro-daniel:v1'
 
@@ -9,19 +17,34 @@ function cloneReportData() {
   return JSON.parse(JSON.stringify(reportPonds)) as Pond[]
 }
 
+function enrichWithReportMetadata(pond: Pond): Pond {
+  const base = reportPonds.find((item) => item.id === pond.id)
+  if (!base) return { ...pond, plannedBiometries: pond.plannedBiometries ?? [] }
+
+  return {
+    ...pond,
+    reportReferenceDate: pond.reportReferenceDate ?? base.reportReferenceDate ?? null,
+    plannedBiometries:
+      pond.plannedBiometries && pond.plannedBiometries.length
+        ? pond.plannedBiometries
+        : base.plannedBiometries ?? [],
+  }
+}
+
 function loadPonds() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? (JSON.parse(stored) as Pond[]) : cloneReportData()
+    if (!stored) return cloneReportData()
+    return (JSON.parse(stored) as Pond[]).map(enrichWithReportMetadata)
   } catch {
     return cloneReportData()
   }
 }
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
   if (!value) return '—'
   const [year, month, day] = value.split('-')
-  return `${day}/${month}/${year}`
+  return day + '/' + month + '/' + year
 }
 
 function formatNumber(value: number, decimals = 0) {
@@ -32,7 +55,16 @@ function formatNumber(value: number, decimals = 0) {
 }
 
 function id(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)
+}
+
+function plannedAfterLatest(pond: Pond): PlannedBiometry | null {
+  const planned = pond.plannedBiometries ?? []
+  if (!planned.length) return null
+  const history = calculateHistory(pond)
+  const latest = history[history.length - 1]
+  if (!latest) return planned[0]
+  return planned.find((item) => item.date > latest.date) ?? null
 }
 
 type Modal = 'pond' | 'biometry' | null
@@ -78,7 +110,7 @@ export default function App() {
             ←
           </button>
         ) : (
-          <span className="local-badge">● Local</span>
+          <span className="device-badge">Neste aparelho</span>
         )}
       </header>
 
@@ -90,17 +122,9 @@ export default function App() {
         )}
       </main>
 
-      {!selected && (
-        <button className="fab" onClick={() => setModal('pond')}>
-          <span>＋</span> Novo viveiro
-        </button>
-      )}
-
-      {selected && (
-        <button className="fab" onClick={() => setModal('biometry')}>
-          <span>＋</span> Biometria
-        </button>
-      )}
+      <button className="fab" onClick={() => setModal(selected ? 'biometry' : 'pond')}>
+        <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
+      </button>
 
       {modal === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
       {modal === 'biometry' && selected && (
@@ -119,112 +143,185 @@ function Dashboard({
   onOpen: (id: string) => void
   onAdd: () => void
 }) {
+  const withBiometry = ponds.filter((pond) => pond.biometries.length > 0).length
+
   return (
     <section className="page">
-      <div className="hero-card">
+      <div className="summary-bar">
         <div>
-          <span className="eyebrow light">Visão rápida</span>
-          <h2>Acompanhe o cultivo sem fazer conta.</h2>
-          <p>Informe apenas os dados observáveis. O aplicativo calcula os indicadores comprovados pela tabela.</p>
-        </div>
-        <div className="hero-stat">
           <strong>{ponds.length}</strong>
-          <span>{ponds.length === 1 ? 'viveiro' : 'viveiros'}</span>
+          <span>viveiros</span>
+        </div>
+        <div>
+          <strong>{withBiometry}</strong>
+          <span>com biometria</span>
+        </div>
+        <div>
+          <strong>{ponds.length - withBiometry}</strong>
+          <span>aguardando</span>
         </div>
       </div>
 
-      <div className="section-heading">
+      <div className="section-heading compact-heading">
         <div>
-          <h2>Seus viveiros</h2>
-          <p>Toque em um viveiro para ver histórico e indicadores.</p>
+          <h2>Produção em andamento</h2>
+          <p>Resumo fiel aos dados disponíveis.</p>
         </div>
         <button className="text-button" onClick={onAdd}>Adicionar</button>
       </div>
 
       <div className="pond-list">
-        {ponds.map((pond) => {
-          const history = calculateHistory(pond)
-          const latest = history[history.length - 1]
-          return (
-            <button className="pond-card" key={pond.id} onClick={() => onOpen(pond.id)}>
-              <div className="pond-card-head">
-                <div>
-                  <span className="pond-name">{pond.name}</span>
-                  <span className="pond-meta">
-                    {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais
-                  </span>
-                </div>
-                <span className={latest ? 'status ready' : 'status waiting'}>
-                  {latest ? `Dia ${latest.cultivationDay}` : 'Sem biometria'}
-                </span>
-              </div>
-
-              {latest ? (
-                <div className="metric-grid compact">
-                  <Metric label="Peso" value={`${formatNumber(latest.currentWeightG, 1)} g`} />
-                  <Metric label="Biomassa" value={`${formatNumber(round(latest.biomassKg))} kg`} />
-                  <Metric label="Sobrevivência" value={`${formatNumber(round(latest.survivalPercent))}%`} />
-                  <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
-                </div>
-              ) : (
-                <div className="empty-inline">Cadastre a primeira biometria para iniciar os cálculos.</div>
-              )}
-            </button>
-          )
-        })}
+        {ponds.map((pond) => (
+          <PondCard pond={pond} key={pond.id} onOpen={() => onOpen(pond.id)} />
+        ))}
       </div>
 
-      <div className="note-card">
-        <strong>Sem dados inventados</strong>
-        <p>Ração acumulada continua sendo informada manualmente, porque o relatório não permite deduzir sua origem com segurança.</p>
+      <div className="storage-note">
+        <strong>Dados salvos neste aparelho</strong>
+        <span>Sem login e sem sincronização em nuvem nesta versão.</span>
       </div>
     </section>
+  )
+}
+
+function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
+  const history = calculateHistory(pond)
+  const latest = history[history.length - 1]
+  const cultivationDays = cultivationDaysAtReference(pond)
+  const nextPlanned = plannedAfterLatest(pond)
+
+  return (
+    <button className="pond-card" onClick={onOpen}>
+      <div className="pond-card-head">
+        <div>
+          <span className="pond-name">{pond.name}</span>
+          <span className="pond-meta">
+            {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory}
+          </span>
+        </div>
+        <span className={latest ? 'status ready' : 'status waiting'}>
+          {latest ? 'Com biometria' : 'Sem biometria'}
+        </span>
+      </div>
+
+      {pond.reportReferenceDate && (
+        <div className="report-context">
+          <span>Relatório {formatDate(pond.reportReferenceDate)}</span>
+          <strong>{cultivationDays === null ? '—' : cultivationDays + ' dias de cultivo'}</strong>
+        </div>
+      )}
+
+      {latest ? (
+        <>
+          <div className="latest-label">
+            Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
+          </div>
+          <div className="metric-grid compact">
+            <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
+            <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} />
+            <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
+            <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
+          </div>
+        </>
+      ) : (
+        <div className="empty-inline">
+          <strong>Ainda não há biometria realizada.</strong>
+          <span>Os indicadores zootécnicos só aparecem depois de uma medição real.</span>
+        </div>
+      )}
+
+      {nextPlanned && (
+        <div className="planned-inline">
+          Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
+        </div>
+      )}
+    </button>
   )
 }
 
 function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => void }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
+  const cultivationDays = cultivationDaysAtReference(pond)
+  const cycleDays = cycleDaysAtReference(pond)
+  const nextPlanned = plannedAfterLatest(pond)
 
   return (
     <section className="page detail-page">
-      <div className="pond-title-card">
+      <div className="report-summary-card">
         <div>
-          <span className="eyebrow">Informações gerais</span>
-          <h2>{pond.name}</h2>
-          <p>{pond.laboratory || 'Laboratório não informado'} · Ciclo {pond.cycle}</p>
+          <span className="eyebrow">Situação no relatório</span>
+          <h2>{pond.reportReferenceDate ? formatDate(pond.reportReferenceDate) : 'Dados do viveiro'}</h2>
+          <p>
+            {cultivationDays === null
+              ? 'Sem data de referência cadastrada.'
+              : cultivationDays + ' dias de cultivo · ' + cycleDays + ' dias de ciclo'}
+          </p>
         </div>
-        <div className="day-orb">
-          <strong>{latest ? latest.cultivationDay : '—'}</strong>
-          <span>dia</span>
+        <div className="summary-orb">
+          <strong>{formatNumber(round(densityPerSquareMeter(pond), 1), 1)}</strong>
+          <span>animais/m²</span>
         </div>
       </div>
 
-      <div className="info-strip">
-        <Info label="Área" value={`${formatNumber(pond.areaHa, 2)} ha`} />
-        <Info label="Densidade" value={`${formatNumber(round(densityPerSquareMeter(pond), 1), 1)}/m²`} />
-        <Info label="População" value={formatNumber(pond.initialPopulation)} />
-        <Info label="Preparo" value={`${preparationDays(pond)} dias`} />
+      <div className="section-heading compact-heading">
+        <div>
+          <h2>Dados do viveiro</h2>
+          <p>Informações de cadastro e do lote.</p>
+        </div>
       </div>
+
+      <div className="facts-grid">
+        <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
+        <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
+        <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
+        <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
+        <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
+        <Fact label="Ciclo" value={String(pond.cycle)} />
+        <Fact label="Laboratório" value={pond.laboratory || '—'} />
+        <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
+        <Fact label="Raçoador" value={pond.feeder || '—'} />
+      </div>
+
+      {nextPlanned && (
+        <div className="next-action-card">
+          <div>
+            <span className="eyebrow">Planejamento do relatório</span>
+            <strong>{latest ? 'Biometria seguinte prevista' : 'Primeira biometria prevista'}</strong>
+            <p>{formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}</p>
+          </div>
+          <button className="secondary-button" onClick={onAddBiometry}>Registrar</button>
+        </div>
+      )}
 
       {latest ? (
         <>
           <div className="section-heading">
             <div>
               <h2>Última biometria</h2>
-              <p>{formatDate(latest.date)} · Dia {latest.cultivationDay}</p>
+              <p>{formatDate(latest.date)} · dia {latest.cultivationDay}</p>
             </div>
           </div>
 
+          <div className="metric-section-label">Informado na biometria</div>
           <div className="metric-grid">
-            <Metric label="Peso atual" value={`${formatNumber(latest.currentWeightG, 1)} g`} featured />
-            <Metric label="Biomassa" value={`${formatNumber(round(latest.biomassKg))} kg`} featured />
-            <Metric label="Sobrevivência" value={`${formatNumber(round(latest.survivalPercent))}%`} />
+            <Metric label="Peso atual" value={formatNumber(latest.currentWeightG, 1) + ' g'} featured />
+            <Metric label="Taxa alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
+            <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+            <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+          </div>
+
+          <div className="metric-section-label calculated-label">Calculado pelo app</div>
+          <div className="metric-grid">
+            <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} featured />
+            <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
             <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
-            <Metric label="Ração/dia" value={`${formatNumber(latest.dailyFeedKg)} kg`} />
-            <Metric label="Ração p/100%" value={`${formatNumber(round(latest.feedFor100Kg))} kg`} />
-            <Metric label="Crescimento" value={`${formatNumber(round(latest.growthG, 1), 1)} g`} />
-            <Metric label="Cresc. médio" value={`${formatNumber(round(latest.averageGrowthPerWeekG, 2), 2)} g/sem`} />
+            <Metric label="Ração p/100%" value={formatNumber(round(latest.feedFor100Kg)) + ' kg'} />
+            <Metric
+              label={latest.previousWeightG === null ? 'Crescimento (1ª bio)' : 'Ganho desde anterior'}
+              value={formatNumber(round(latest.growthG, 1), 1) + ' g'}
+            />
+            <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
 
           <TrendChart pond={pond} />
@@ -232,16 +329,46 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
       ) : (
         <div className="empty-card">
           <div className="empty-icon">≈</div>
-          <h2>Ainda não há biometria</h2>
-          <p>Quando houver dados palpáveis do viveiro, registre peso, taxa de alimentação, ração do dia e ração acumulada.</p>
-          <button className="primary-button" onClick={onAddBiometry}>Registrar primeira biometria</button>
+          <h2>Aguardando a primeira biometria</h2>
+          <p>
+            {pond.reportReferenceDate
+              ? 'O relatório traz os dados gerais deste viveiro, mas ainda não registra biometria realizada. '
+              : 'O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada. '}
+            Não mostramos peso, biomassa, sobrevivência ou FCA até existir medição real.
+          </p>
+          {nextPlanned && (
+            <div className="scheduled-highlight">
+              Prevista no relatório: <strong>{formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}</strong>
+            </div>
+          )}
+          <button className="primary-button" onClick={onAddBiometry}>Registrar biometria realizada</button>
         </div>
       )}
 
+      <HistorySection pond={pond} />
+      <PlanningSection pond={pond} />
+
+      <details className="calculation-details">
+        <summary>Como o app calcula os indicadores?</summary>
+        <p>
+          Os cálculos automáticos reproduzem as relações que fecham as seis linhas preenchidas do V01.
+          A ração acumulada continua sendo informada, pois o relatório não permite deduzir sua origem com segurança.
+        </p>
+      </details>
+    </section>
+  )
+}
+
+function HistorySection({ pond }: { pond: Pond }) {
+  const history = calculateHistory(pond)
+  if (!history.length) return null
+
+  return (
+    <>
       <div className="section-heading">
         <div>
-          <h2>Histórico</h2>
-          <p>{history.length ? `${history.length} registros` : 'Nenhum registro ainda'}</p>
+          <h2>Biometrias realizadas</h2>
+          <p>{history.length + ' registros'}</p>
         </div>
       </div>
 
@@ -261,15 +388,32 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
           </article>
         ))}
       </div>
+    </>
+  )
+}
 
-      <div className="source-card">
-        <span>ƒx</span>
-        <div>
-          <strong>Cálculos automáticos</strong>
-          <p>Os resultados usam as relações matemáticas que fecham as seis linhas preenchidas do V01. Valores internos não são arredondados antes do cálculo.</p>
-        </div>
+function PlanningSection({ pond }: { pond: Pond }) {
+  const planned = pond.plannedBiometries ?? []
+  if (!planned.length) return null
+
+  return (
+    <details className="planning-card">
+      <summary>
+        <span>
+          <strong>Planejamento de biometria</strong>
+          <small>{planned.length + ' datas previstas no relatório'}</small>
+        </span>
+        <span>Ver datas</span>
+      </summary>
+      <div className="planning-list">
+        {planned.map((item) => (
+          <div key={item.date}>
+            <strong>Dia {item.cultivationDay}</strong>
+            <span>{formatDate(item.date)}</span>
+          </div>
+        ))}
       </div>
-    </section>
+    </details>
   )
 }
 
@@ -278,47 +422,61 @@ function TrendChart({ pond }: { pond: Pond }) {
   if (history.length < 2) return null
 
   const width = 340
-  const height = 180
-  const padX = 24
-  const padTop = 18
-  const padBottom = 28
+  const height = 190
+  const padX = 22
+  const padTop = 16
+  const padBottom = 30
   const plotHeight = height - padTop - padBottom
+  const plotWidth = width - padX * 2
   const maxValue = Math.max(...history.flatMap((row) => [row.biomassKg, row.accumulatedFeedKg])) * 1.08
+  const groupWidth = plotWidth / history.length
+  const barWidth = Math.min(14, groupWidth * 0.28)
 
-  const point = (value: number, index: number) => {
-    const x = padX + (index * (width - padX * 2)) / Math.max(1, history.length - 1)
-    const y = padTop + plotHeight - (value / maxValue) * plotHeight
-    return { x, y }
-  }
-
-  const biomassPoints = history.map((row, index) => point(row.biomassKg, index))
-  const feedPoints = history.map((row, index) => point(row.accumulatedFeedKg, index))
+  const barHeight = (value: number) => (value / maxValue) * plotHeight
 
   return (
     <article className="chart-card">
       <div className="section-heading chart-heading">
         <div>
-          <h2>Ração × biomassa</h2>
-          <p>Evolução em kg por dia de cultivo.</p>
+          <h2>Ração acumulada × biomassa</h2>
+          <p>Barras agrupadas como no relatório, em kg.</p>
         </div>
       </div>
       <div className="chart-legend">
         <span><i className="dot biomass" /> Biomassa</span>
         <span><i className="dot feed" /> Ração acumulada</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Gráfico de biomassa e ração acumulada">
+      <svg viewBox={'0 0 ' + width + ' ' + height} role="img" aria-label="Gráfico de barras de biomassa e ração acumulada">
         <line x1={padX} x2={width - padX} y1={padTop + plotHeight} y2={padTop + plotHeight} className="axis-line" />
-        <polyline points={biomassPoints.map((p) => `${p.x},${p.y}`).join(' ')} className="chart-line biomass-line" />
-        <polyline points={feedPoints.map((p) => `${p.x},${p.y}`).join(' ')} className="chart-line feed-line" />
-        {biomassPoints.map((p, index) => (
-          <circle key={`b-${index}`} cx={p.x} cy={p.y} r="3.5" className="chart-point biomass-point" />
-        ))}
-        {feedPoints.map((p, index) => (
-          <circle key={`f-${index}`} cx={p.x} cy={p.y} r="3.5" className="chart-point feed-point" />
-        ))}
         {history.map((row, index) => {
-          const p = point(0, index)
-          return <text key={row.id} x={p.x} y={height - 8} textAnchor="middle" className="chart-label">{row.cultivationDay}</text>
+          const center = padX + groupWidth * index + groupWidth / 2
+          const biomassHeight = barHeight(row.biomassKg)
+          const feedHeight = barHeight(row.accumulatedFeedKg)
+          const baseline = padTop + plotHeight
+
+          return (
+            <g key={row.id}>
+              <rect
+                x={center - barWidth - 2}
+                y={baseline - biomassHeight}
+                width={barWidth}
+                height={biomassHeight}
+                rx="2"
+                className="bar-biomass"
+              />
+              <rect
+                x={center + 2}
+                y={baseline - feedHeight}
+                width={barWidth}
+                height={feedHeight}
+                rx="2"
+                className="bar-feed"
+              />
+              <text x={center} y={height - 9} textAnchor="middle" className="chart-label">
+                {row.cultivationDay}
+              </text>
+            </g>
+          )
         })}
       </svg>
     </article>
@@ -334,9 +492,9 @@ function Metric({ label, value, featured = false }: { label: string; value: stri
   )
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="info-item">
+    <div className="fact">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -369,12 +527,14 @@ function PondForm({ onClose, onSave }: { onClose: () => void; onSave: (pond: Pon
       cycle: Number(form.cycle),
       feeder: form.feeder.trim(),
       plPerGram: form.plPerGram ? Number(form.plPerGram) : null,
+      reportReferenceDate: null,
+      plannedBiometries: [],
       biometries: [],
     })
   }
 
   return (
-    <ModalShell title="Novo viveiro" subtitle="Cadastre apenas o que você conhece." onClose={onClose}>
+    <ModalShell title="Novo viveiro" subtitle="Cadastre os dados palpáveis do lote." onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
@@ -406,6 +566,10 @@ function BiometryForm({
   onClose: () => void
   onSave: (input: BiometryInput) => void
 }) {
+  const history = useMemo(() => calculateHistory(pond), [pond])
+  const latest = history[history.length - 1]
+  const planned = plannedAfterLatest(pond)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({
     date: '',
     currentWeightG: '',
@@ -414,7 +578,6 @@ function BiometryForm({
     accumulatedFeedKg: '',
   })
 
-  const previousWeight = useMemo(() => calculateHistory(pond).slice(-1)[0]?.currentWeightG ?? null, [pond])
   const parsed: BiometryInput | null =
     form.date && Number(form.currentWeightG) > 0 && Number(form.feedRatePercent) > 0
       ? {
@@ -427,10 +590,28 @@ function BiometryForm({
         }
       : null
 
-  const preview = parsed ? calculateBiometry(pond, parsed, previousWeight) : null
+  const preview = parsed ? calculateBiometry(pond, parsed, latest?.currentWeightG ?? null) : null
+
+  function usePlannedDate() {
+    if (!planned) return
+    setForm({ ...form, date: planned.date })
+    setError('')
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    setError('')
+
+    if (latest && form.date <= latest.date) {
+      setError('A nova biometria precisa ter data posterior à última biometria realizada.')
+      return
+    }
+
+    if (latest && Number(form.accumulatedFeedKg) < latest.accumulatedFeedKg) {
+      setError('Ração acumulada não pode ser menor que o valor acumulado anterior.')
+      return
+    }
+
     onSave({
       id: id('bio'),
       date: form.date,
@@ -442,9 +623,17 @@ function BiometryForm({
   }
 
   return (
-    <ModalShell title="Nova biometria" subtitle={pond.name} onClose={onClose}>
+    <ModalShell title="Registrar biometria" subtitle={pond.name} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
-        <Field label="Data da biometria" required>
+        {planned && (
+          <button type="button" className="planned-date-button" onClick={usePlannedDate}>
+            <span>Data prevista no relatório</span>
+            <strong>{formatDate(planned.date)} · dia {planned.cultivationDay}</strong>
+            <small>Usar esta data</small>
+          </button>
+        )}
+
+        <Field label="Data realizada" required>
           <input required type="date" min={pond.stockingDate} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         </Field>
         <Field label="Peso atual (g)" required>
@@ -459,23 +648,25 @@ function BiometryForm({
           </Field>
         </div>
         <Field label="Ração acumulada (kg)" required>
-          <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.accumulatedFeedKg} onChange={(e) => setForm({ ...form, accumulatedFeedKg: e.target.value })} />
-          <small>Por enquanto este valor é informado: a tabela não revela uma fórmula confiável para deduzi-lo.</small>
+          <input required type="number" min={latest?.accumulatedFeedKg ?? 0} step="0.01" inputMode="decimal" value={form.accumulatedFeedKg} onChange={(e) => setForm({ ...form, accumulatedFeedKg: e.target.value })} />
+          <small>Entrada manual: o relatório não fornece fórmula confiável para deduzir este valor.</small>
         </Field>
+
+        {error && <div className="form-error">{error}</div>}
 
         {preview && (
           <div className="preview-card">
             <span className="eyebrow">Prévia automática</span>
             <div className="preview-grid">
-              <Metric label="Dia" value={String(preview.cultivationDay)} />
-              <Metric label="Biomassa" value={`${formatNumber(round(preview.biomassKg))} kg`} />
-              <Metric label="Sobrevivência" value={`${formatNumber(round(preview.survivalPercent))}%`} />
+              <Metric label="Dia da biometria" value={String(preview.cultivationDay)} />
+              <Metric label="Biomassa" value={formatNumber(round(preview.biomassKg)) + ' kg'} />
+              <Metric label="Sobrevivência" value={formatNumber(round(preview.survivalPercent)) + '%'} />
               <Metric label="FCA" value={formatNumber(round(preview.fca, 2), 2)} />
             </div>
           </div>
         )}
 
-        <button className="primary-button" type="submit">Salvar biometria</button>
+        <button className="primary-button" type="submit">Salvar biometria realizada</button>
       </form>
     </ModalShell>
   )

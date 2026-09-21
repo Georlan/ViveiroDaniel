@@ -1,13 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { calculateHistory, densityPerSquareMeter, preparationDays, round } from './calculations'
+import {
+  calculateHistory,
+  cultivationDaysAtReference,
+  cycleDaysAtReference,
+  densityPerSquareMeter,
+  preparationDays,
+  round,
+} from './calculations'
 import { reportPonds } from '../data/reportData'
 
 describe('report-backed calculations', () => {
   const v01 = reportPonds[0]
+  const v02 = reportPonds[1]
 
-  it('reproduces V01 general information', () => {
+  it('reproduces V01 and V02 general information from the report', () => {
     expect(densityPerSquareMeter(v01)).toBe(30)
     expect(preparationDays(v01)).toBe(30)
+    expect(cultivationDaysAtReference(v01)).toBe(74)
+    expect(cycleDaysAtReference(v01)).toBe(104)
+
+    expect(densityPerSquareMeter(v02)).toBe(16)
+    expect(preparationDays(v02)).toBe(5)
+    expect(cultivationDaysAtReference(v02)).toBe(16)
+    expect(cycleDaysAtReference(v02)).toBe(21)
+    expect(v02.plannedBiometries?.[0]).toEqual({
+      cultivationDay: 31,
+      date: '2026-08-05',
+    })
+  })
+
+  it('keeps summary cultivation days separate from inclusive biometry day numbering', () => {
+    const latest = calculateHistory(v01)[5]
+    expect(cultivationDaysAtReference(v01)).toBe(74)
+    expect(latest.cultivationDay).toBe(75)
   })
 
   it('reproduces all six populated V01 rows after display rounding', () => {
