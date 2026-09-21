@@ -687,6 +687,27 @@ function BiometryForm({
     )
   }
 
+  return (
+    <SimpleBiometryForm
+      pond={pond}
+      initial={initial}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  )
+}
+
+function SimpleBiometryForm({
+  pond,
+  initial,
+  onClose,
+  onSave,
+}: {
+  pond: Pond
+  initial?: BiometryInput
+  onClose: () => void
+  onSave: (input: BiometryInput) => void
+}) {
   const history = useMemo(() => calculateHistory(pond), [pond])
   const latest = history[history.length - 1]
   const planned = initial ? null : plannedAfterLatest(pond)
