@@ -20,6 +20,20 @@ export function preparationDays(pond: Pick<Pond, 'cycleStartDate' | 'stockingDat
   return daysBetween(pond.cycleStartDate, pond.stockingDate)
 }
 
+export function cultivationDaysAtReference(
+  pond: Pick<Pond, 'stockingDate' | 'reportReferenceDate'>,
+) {
+  if (!pond.reportReferenceDate) return null
+  return Math.max(0, daysBetween(pond.stockingDate, pond.reportReferenceDate))
+}
+
+export function cycleDaysAtReference(
+  pond: Pick<Pond, 'cycleStartDate' | 'reportReferenceDate'>,
+) {
+  if (!pond.reportReferenceDate) return null
+  return Math.max(0, daysBetween(pond.cycleStartDate, pond.reportReferenceDate))
+}
+
 export function calculateBiometry(
   pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
   input: BiometryInput,
