@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateHistory,
+  compareBiometriesForDisplay,
   cultivationDaysAtReference,
   cycleDaysAtReference,
   densityPerSquareMeter,
@@ -33,6 +34,18 @@ describe('report-backed calculations', () => {
     const latest = calculateHistory(v01)[5]
     expect(cultivationDaysAtReference(v01)).toBe(74)
     expect(latest.cultivationDay).toBe(75)
+  })
+
+  it('keeps last-change summaries consistent with displayed report values', () => {
+    const history = calculateHistory(v01)
+    const delta = compareBiometriesForDisplay(history[4], history[5])
+
+    expect(delta).toEqual({
+      weightG: 2,
+      biomassKg: -85,
+      survivalPercentagePoints: -17,
+      fca: 0.47,
+    })
   })
 
   it('reproduces all six populated V01 rows after display rounding', () => {
