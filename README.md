@@ -1,1 +1,116 @@
-# Viveiro Daniel\n\nAplicativo web **mobile-first** para controle zootécnico simples de viveiros de camarão.\n\nO objetivo desta primeira versão é reduzir a planilha a um fluxo fácil de usar: a pessoa informa apenas dados observáveis e o aplicativo calcula automaticamente somente os indicadores cuja lógica foi reconstruída com confiança a partir do relatório da Fazenda DJ.\n\n## Estado atual\n\n- Dashboard de viveiros.\n- Visualização individual por viveiro.\n- Cadastro de viveiro.\n- Registro de biometria.\n- Histórico de biometrias.\n- Gráfico de ração acumulada × biomassa.\n- Persistência local no navegador (localStorage).\n- Dados iniciais do V01 e V02 reproduzidos apenas com informações observadas no relatório.\n- Testes matemáticos cobrindo as 6 linhas preenchidas do V01.\n- Build estático pronto para Cloudflare Pages.\n\nNão há backend, login ou sincronização em nuvem nesta fase.\n\n## Dados informados pelo usuário\n\n### Viveiro\n\nNome, área em hectares, população inicial, laboratório, data de povoamento, início do ciclo, ciclo, raçoador e PL/g quando conhecido.\n\n### Biometria\n\nData, peso atual, taxa de alimentação, ração/dia e ração acumulada.\n\nRação acumulada continua sendo entrada manual. O relatório não fornece evidência suficiente para deduzir sua origem sem inventar uma regra.\n\n## Cálculos confirmados\n\nOs cálculos são feitos com precisão completa e arredondados somente na apresentação.\n\n- Densidade = população inicial / (área em ha × 10.000)\n- Dia da biometria = data da biometria - data de povoamento + 1\n- Crescimento = peso atual - peso anterior\n- Crescimento médio = peso atual / (dia da biometria / 7)\n- Ração p/100% = (população inicial × peso atual / 1000) × taxa de alimentação\n- Sobrevivência estimada = ração/dia / ração p/100%\n- Biomassa = ração/dia / taxa de alimentação\n- FCA = ração acumulada / biomassa\n\nNa primeira biometria, o crescimento exibido equivale ao próprio peso atual. Apesar do rótulo original “crescimento semanal”, a fórmula não normaliza intervalos diferentes de 7 dias.\n\nEssas relações reproduzem, após o arredondamento de exibição, todas as seis linhas preenchidas do V01 presentes no relatório analisado.\n\n## Rodar localmente\n\nRequer Node.js 20+.\n\n    npm install\n    npm run dev\n\nTestes:\n\n    npm test\n\nBuild de produção:\n\n    npm run build\n\nO resultado fica em dist/.\n\n## Cloudflare Pages\n\nO projeto já está estruturado como aplicação estática Vite/React.\n\nQuando for hora do deploy, a configuração esperada no Cloudflare Pages é:\n\n- Framework preset: Vite\n- Build command: npm run build\n- Build output directory: dist\n- Node.js: 20+\n- Variáveis de ambiente: nenhuma nesta fase\n\nO arquivo public/_redirects já mantém o fallback da SPA para index.html.\n\n## Regra do produto\n\n> Se o dado não está sustentado pela tabela ou por uma relação matemática validada contra ela, ele não entra como cálculo automático.\n\nNovas fórmulas devem ser adicionadas apenas depois de serem validadas contra os dados disponíveis.\n
+# Viveiro Daniel
+
+Aplicativo web **mobile-first** para controle zootécnico simples de viveiros de camarão.
+
+A regra do produto é simples: a pessoa informa somente dados fáceis de observar no campo e o aplicativo calcula o restante quando a relação está sustentada pelos registros analisados.
+
+## Fluxo de biometria
+
+Nos novos registros o modo simples pede:
+
+- data da biometria;
+- peso total da amostra em gramas;
+- quantidade de camarões pesados;
+- ração usada por dia no momento da biometria;
+- ração fornecida desde a biometria anterior, ou desde o povoamento na primeira biometria.
+
+O aplicativo calcula automaticamente:
+
+- peso médio = peso da amostra / quantidade;
+- crescimento em relação à biometria anterior;
+- ração acumulada = acumulado anterior + ração informada para o período;
+- ração p/100%;
+- sobrevivência estimada;
+- biomassa;
+- FCA;
+- crescimento médio.
+
+### Taxa de alimentação
+
+A taxa ainda não possui uma regra matemática confirmada pelo material disponível.
+
+Para facilitar o uso, o app sugere a taxa correspondente ao ponto de peso mais próximo observado no histórico real do V01. Essa sugestão é apresentada explicitamente como **estimativa** e pode ser corrigida manualmente antes de salvar.
+
+Ela não deve ser tratada como tabela zootécnica definitiva.
+
+## Evidências usadas
+
+O relatório da Fazenda DJ confirma as relações matemáticas usadas nos seis registros preenchidos do V01.
+
+O controle operacional mostrado posteriormente também fornece um exemplo importante: no intervalo final do relatório aparecem 788 kg de ração acumulada no dia 68 e 857 kg no dia 75; o registro operacional desse período informa 69 kg de ração. Portanto:
+
+    788 + 69 = 857
+
+Isso sustenta o fluxo de pedir a **ração do período** e deixar o aplicativo manter o acumulado, sem exigir que o usuário faça essa soma.
+
+A amostra operacional também mostra o processo:
+
+    peso total da amostra / quantidade de camarões = peso médio
+
+Por exemplo:
+
+    303 g / 33 = 9,1818... g
+
+## Estado atual
+
+- Dashboard mobile-first.
+- V01 e V02 preservados conforme o relatório.
+- Cadastro de viveiro.
+- Registro de biometria em modo simples.
+- Planejamento de biometria.
+- Comparação direta entre biometrías no lugar do gráfico principal.
+- Histórico completo.
+- Persistência local no navegador com localStorage.
+- Testes matemáticos contra as seis linhas preenchidas do V01.
+- Testes do fluxo simples de amostra e ração do período.
+- Build estático pronto para Cloudflare Pages.
+
+Não há backend, login ou sincronização em nuvem nesta fase.
+
+## Cálculos confirmados pelo relatório
+
+Os cálculos usam precisão completa internamente e arredondamento apenas na apresentação.
+
+- Densidade = população inicial / (área em ha × 10.000)
+- Dia da biometria = data da biometria - data de povoamento + 1
+- Crescimento = peso atual - peso anterior
+- Crescimento médio = peso atual / (dia da biometria / 7)
+- Ração p/100% = (população inicial × peso atual / 1000) × taxa de alimentação
+- Sobrevivência estimada = ração/dia / ração p/100%
+- Biomassa = ração/dia / taxa de alimentação
+- FCA = ração acumulada / biomassa
+
+Na primeira linha histórica do relatório, o campo chamado crescimento equivale ao próprio peso atual. O relatório também não normaliza esse campo quando o intervalo entre biometrias é diferente de sete dias.
+
+## Rodar localmente
+
+Requer Node.js 20+.
+
+    npm install
+    npm run dev
+
+Testes:
+
+    npm test
+
+Build de produção:
+
+    npm run build
+
+O resultado fica em dist/.
+
+## Cloudflare Pages
+
+- Framework preset: Vite
+- Build command: npm run build
+- Build output directory: dist
+- Node.js: 20+
+- Variáveis de ambiente: nenhuma nesta fase
+
+O arquivo public/_redirects mantém o fallback da SPA para index.html.
+
+## Regra do produto
+
+> Se o dado não está sustentado pelos registros disponíveis ou por uma relação matemática validada, ele não entra como verdade automática.
+
+Estimativas devem permanecer identificadas como estimativas e ajustáveis quando necessário.
