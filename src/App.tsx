@@ -170,6 +170,7 @@ export default function App() {
       return
     }
 
+    const token = syncToken
     let cancelled = false
 
     async function connect() {
@@ -178,7 +179,7 @@ export default function App() {
       setSyncStatus('connecting')
 
       try {
-        const remote = await fetchRemoteState(syncToken)
+        const remote = await fetchRemoteState(token)
         if (cancelled) return
 
         if (!remote) {
@@ -210,6 +211,7 @@ export default function App() {
   useEffect(() => {
     if (!syncToken) return
 
+    const token = syncToken
     let stopped = false
 
     async function pullLatest() {
@@ -223,7 +225,7 @@ export default function App() {
 
       syncBusyRef.current = true
       try {
-        const remote = await fetchRemoteState(syncToken)
+        const remote = await fetchRemoteState(token)
         if (!remote || stopped) return
 
         if (remote.version > syncVersionRef.current) {
