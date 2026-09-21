@@ -7,6 +7,11 @@ export type BiometryInput = {
   accumulatedFeedKg: number
 }
 
+export type PlannedBiometry = {
+  date: string
+  cultivationDay: number
+}
+
 export type Pond = {
   id: string
   name: string
@@ -18,6 +23,8 @@ export type Pond = {
   cycle: number
   feeder: string
   plPerGram: number | null
+  reportReferenceDate?: string | null
+  plannedBiometries?: PlannedBiometry[]
   biometries: BiometryInput[]
 }
 
