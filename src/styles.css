@@ -1227,3 +1227,27 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+
+.metric-section-label {
+  margin: 14px 2px 8px;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.calculated-label {
+  color: var(--primary);
+}
+
+.bar-biomass {
+  fill: var(--blue);
+  opacity: 0.88;
+}
+
+.bar-feed {
+  fill: var(--coral);
+  opacity: 0.88;
+}
