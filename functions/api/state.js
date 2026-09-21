@@ -39,12 +39,22 @@ async function workspaceKey(token) {
 }
 
 async function readState(db, key) {
-  const row = await db
-    .prepare(
-      'SELECT payload, version, updated_at AS updatedAt FROM shared_state WHERE workspace_key = ?',
-    )
-    .bind(key)
-    .first()
+  let row
+
+  try {
+    row = await db
+      .prepare(
+        'SELECT payload, version, updated_at AS updatedAt FROM shared_state WHERE workspace_key = ?',
+      )
+      .bind(key)
+      .first()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.toLowerCase().includes('no such table')) throw error
+
+    await ensureSchema(db)
+    return null
+  }
 
   if (!row) return null
 
@@ -78,7 +88,6 @@ export async function onRequestGet(context) {
   const token = readBearer(context.request)
   if (!token) return json({ error: 'unauthorized' }, 401)
 
-  await ensureSchema(db)
   const key = await workspaceKey(token)
   const state = await readState(db, key)
 
@@ -117,13 +126,13 @@ export async function onRequestPut(context) {
     return json({ error: 'payload_too_large' }, 413)
   }
 
-  await ensureSchema(db)
-
   const key = await workspaceKey(token)
   const expectedVersion = body.expectedVersion
   const now = new Date().toISOString()
 
   if (expectedVersion === 0) {
+    await ensureSchema(db)
+
     const inserted = await db
       .prepare(
         'INSERT OR IGNORE INTO shared_state (workspace_key, payload, version, updated_at) VALUES (?, ?, 1, ?)',
