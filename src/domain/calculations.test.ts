@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accumulatedFeedFromPeriod,
+  averageWeightFromSample,
   calculateHistory,
   compareBiometriesForDisplay,
   cultivationDaysAtReference,
@@ -7,6 +9,7 @@ import {
   densityPerSquareMeter,
   preparationDays,
   round,
+  suggestFeedRatePercent,
 } from './calculations'
 import { reportPonds } from '../data/reportData'
 
@@ -34,6 +37,20 @@ describe('report-backed calculations', () => {
     const latest = calculateHistory(v01)[5]
     expect(cultivationDaysAtReference(v01)).toBe(74)
     expect(latest.cultivationDay).toBe(75)
+  })
+
+  it('reconstructs the simple manual workflow from the operational example', () => {
+    expect(averageWeightFromSample(303, 33)).toBeCloseTo(9.1818, 4)
+    expect(accumulatedFeedFromPeriod(788, 69)).toBe(857)
+
+    const suggested = suggestFeedRatePercent(9.18, v01.biometries)
+    expect(suggested).toBe(3.5)
+  })
+
+  it('suggests only from observed rate points and leaves the value editable in the UI', () => {
+    expect(suggestFeedRatePercent(4.9, v01.biometries)).toBe(4.5)
+    expect(suggestFeedRatePercent(0, v01.biometries)).toBeNull()
+    expect(suggestFeedRatePercent(5, [])).toBeNull()
   })
 
   it('keeps last-change summaries consistent with displayed report values', () => {

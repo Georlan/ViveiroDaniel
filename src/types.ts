@@ -5,6 +5,9 @@ export type BiometryInput = {
   feedRatePercent: number
   dailyFeedKg: number
   accumulatedFeedKg: number
+  sampleTotalWeightG?: number | null
+  sampleCount?: number | null
+  periodFeedKg?: number | null
 }
 
 export type PlannedBiometry = {

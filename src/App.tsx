@@ -1,5 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import {
+  accumulatedFeedFromPeriod,
+  averageWeightFromSample,
   calculateBiometry,
   calculateHistory,
   compareBiometriesForDisplay,
@@ -8,6 +10,7 @@ import {
   densityPerSquareMeter,
   preparationDays,
   round,
+  suggestFeedRatePercent,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
 import type { BiometryInput, PlannedBiometry, Pond } from './types'
@@ -328,26 +331,47 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
             </div>
           </div>
 
-          <div className="metric-section-label">Informado na biometria</div>
+          <div className="metric-section-label">Registrado no campo</div>
           <div className="metric-grid">
-            <Metric label="Peso atual" value={formatNumber(latest.currentWeightG, 1) + ' g'} featured />
-            <Metric label="Taxa alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
-            <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-            <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+            {latest.sampleTotalWeightG && latest.sampleCount ? (
+              <>
+                <Metric label="Peso da amostra" value={formatNumber(latest.sampleTotalWeightG) + ' g'} featured />
+                <Metric label="Qtd. amostrada" value={formatNumber(latest.sampleCount) + ' animais'} />
+                <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+                <Metric label="Ração no período" value={formatNumber(latest.periodFeedKg ?? 0) + ' kg'} />
+              </>
+            ) : (
+              <>
+                <Metric label="Peso médio do relatório" value={formatNumber(latest.currentWeightG, 1) + ' g'} featured />
+                <Metric label="Taxa alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
+                <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+                <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+              </>
+            )}
           </div>
 
-          <div className="metric-section-label calculated-label">Calculado pelo app</div>
+          <div className="metric-section-label calculated-label">Calculado automaticamente</div>
           <div className="metric-grid">
+            {latest.sampleTotalWeightG && latest.sampleCount && (
+              <Metric label="Peso médio" value={formatNumber(latest.currentWeightG, 2) + ' g'} featured />
+            )}
             <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} featured />
             <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
             <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
             <Metric label="Ração p/100%" value={formatNumber(round(latest.feedFor100Kg)) + ' kg'} />
+            <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
             <Metric
               label={latest.previousWeightG === null ? 'Crescimento (1ª bio)' : 'Ganho desde anterior'}
-              value={formatNumber(round(latest.growthG, 1), 1) + ' g'}
+              value={formatNumber(round(latest.growthG, 2), 2) + ' g'}
             />
             <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
+          {latest.sampleTotalWeightG && latest.sampleCount && (
+            <div className="rate-note">
+              Taxa usada no cálculo: <strong>{formatNumber(latest.feedRatePercent, 1)}%</strong>.
+              Ela pode ter sido sugerida pelo histórico e confirmada no cadastro.
+            </div>
+          )}
 
           <ChangeSummary pond={pond} />
         </>
@@ -376,8 +400,9 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
       <details className="calculation-details">
         <summary>Como o app calcula os indicadores?</summary>
         <p>
-          Os cálculos automáticos reproduzem as relações que fecham as seis linhas preenchidas do V01.
-          A ração acumulada continua sendo informada, pois o relatório não permite deduzir sua origem com segurança.
+          Nos novos registros, você informa a amostra, a ração do dia e a ração fornecida desde a biometria anterior.
+          O app calcula peso médio, crescimento e ração acumulada antes de calcular biomassa, sobrevivência estimada,
+          ração p/100% e FCA. A taxa de alimentação é apenas sugerida pelo histórico conhecido e continua ajustável.
         </p>
       </details>
     </section>
@@ -599,21 +624,38 @@ function BiometryForm({
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     date: '',
-    currentWeightG: '',
-    feedRatePercent: '',
+    sampleTotalWeightG: '',
+    sampleCount: '',
     dailyFeedKg: '',
-    accumulatedFeedKg: '',
+    periodFeedKg: '',
+    feedRatePercent: '',
   })
 
+  const sampleTotalWeightG = Number(form.sampleTotalWeightG)
+  const sampleCount = Number(form.sampleCount)
+  const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
+  const suggestedRate = suggestFeedRatePercent(currentWeightG, reportPonds[0]?.biometries ?? [])
+  const effectiveRate = form.feedRatePercent
+    ? Number(form.feedRatePercent)
+    : suggestedRate ?? 0
+  const periodFeedKg = Number(form.periodFeedKg)
+  const accumulatedFeedKg = accumulatedFeedFromPeriod(
+    latest?.accumulatedFeedKg ?? 0,
+    periodFeedKg,
+  )
+
   const parsed: BiometryInput | null =
-    form.date && Number(form.currentWeightG) > 0 && Number(form.feedRatePercent) > 0
+    form.date && currentWeightG > 0 && effectiveRate > 0 && Number(form.dailyFeedKg) >= 0
       ? {
           id: 'preview',
           date: form.date,
-          currentWeightG: Number(form.currentWeightG),
-          feedRatePercent: Number(form.feedRatePercent),
+          currentWeightG,
+          feedRatePercent: effectiveRate,
           dailyFeedKg: Number(form.dailyFeedKg),
-          accumulatedFeedKg: Number(form.accumulatedFeedKg),
+          accumulatedFeedKg,
+          sampleTotalWeightG,
+          sampleCount,
+          periodFeedKg,
         }
       : null
 
@@ -634,66 +676,149 @@ function BiometryForm({
       return
     }
 
-    if (latest && Number(form.accumulatedFeedKg) < latest.accumulatedFeedKg) {
-      setError('Ração acumulada não pode ser menor que o valor acumulado anterior.')
+    if (sampleTotalWeightG <= 0 || sampleCount <= 0) {
+      setError('Informe o peso total da amostra e a quantidade de camarões pesados.')
+      return
+    }
+
+    if (effectiveRate <= 0) {
+      setError('Não foi possível sugerir a taxa de alimentação. Abra o ajuste técnico e informe a taxa.')
       return
     }
 
     onSave({
       id: id('bio'),
       date: form.date,
-      currentWeightG: Number(form.currentWeightG),
-      feedRatePercent: Number(form.feedRatePercent),
+      currentWeightG,
+      feedRatePercent: effectiveRate,
       dailyFeedKg: Number(form.dailyFeedKg),
-      accumulatedFeedKg: Number(form.accumulatedFeedKg),
+      accumulatedFeedKg,
+      sampleTotalWeightG,
+      sampleCount,
+      periodFeedKg,
     })
   }
 
   return (
-    <ModalShell title="Registrar biometria" subtitle={pond.name} onClose={onClose}>
-      <form onSubmit={submit} className="form-grid">
+    <ModalShell title="Registrar biometria" subtitle={pond.name + ' · modo simples'} onClose={onClose}>
+      <form onSubmit={submit} className="form-grid simple-biometry-form">
         {planned && (
           <button type="button" className="planned-date-button" onClick={usePlannedDate}>
-            <span>Data prevista no relatório</span>
+            <span>Data prevista</span>
             <strong>{formatDate(planned.date)} · dia {planned.cultivationDay}</strong>
             <small>Usar esta data</small>
           </button>
         )}
 
-        <Field label="Data realizada" required>
+        <div className="form-step">
+          <span className="form-step-number">1</span>
+          <div>
+            <strong>Quando foi feita?</strong>
+            <small>Use a data real da biometria.</small>
+          </div>
+        </div>
+        <Field label="Data da biometria" required>
           <input required type="date" min={pond.stockingDate} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         </Field>
-        <Field label="Peso atual (g)" required>
-          <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.currentWeightG} onChange={(e) => setForm({ ...form, currentWeightG: e.target.value })} />
-        </Field>
+
+        <div className="form-step">
+          <span className="form-step-number">2</span>
+          <div>
+            <strong>Pese a amostra</strong>
+            <small>Digite só o peso total e quantos camarões foram pesados.</small>
+          </div>
+        </div>
         <div className="two-cols">
-          <Field label="Taxa alimentação (%)" required>
-            <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.feedRatePercent} onChange={(e) => setForm({ ...form, feedRatePercent: e.target.value })} />
+          <Field label="Peso total da amostra (g)" required>
+            <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.sampleTotalWeightG} onChange={(e) => setForm({ ...form, sampleTotalWeightG: e.target.value })} />
           </Field>
-          <Field label="Ração/dia (kg)" required>
-            <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.dailyFeedKg} onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })} />
+          <Field label="Quantidade de camarões" required>
+            <input required type="number" min="1" step="1" inputMode="numeric" value={form.sampleCount} onChange={(e) => setForm({ ...form, sampleCount: e.target.value })} />
           </Field>
         </div>
-        <Field label="Ração acumulada (kg)" required>
-          <input required type="number" min={latest?.accumulatedFeedKg ?? 0} step="0.01" inputMode="decimal" value={form.accumulatedFeedKg} onChange={(e) => setForm({ ...form, accumulatedFeedKg: e.target.value })} />
-          <small>Entrada manual: o relatório não fornece fórmula confiável para deduzir este valor.</small>
+
+        {currentWeightG > 0 && (
+          <div className="sample-result">
+            <span>Peso médio calculado</span>
+            <strong>{formatNumber(currentWeightG, 2)} g</strong>
+            <small>
+              {formatNumber(sampleTotalWeightG, 0)} g ÷ {formatNumber(sampleCount)} animais
+              {latest ? ' · crescimento ' + formatSigned(currentWeightG - latest.currentWeightG, 2) + ' g' : ''}
+            </small>
+          </div>
+        )}
+
+        <div className="form-step">
+          <span className="form-step-number">3</span>
+          <div>
+            <strong>Informe a ração</strong>
+            <small>O restante do controle será calculado pelo app.</small>
+          </div>
+        </div>
+        <Field label="Ração por dia agora (kg)" required>
+          <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.dailyFeedKg} onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })} />
+          <small>É a quantidade diária usada no momento da biometria.</small>
         </Field>
+        <Field label={latest ? 'Ração desde a biometria anterior (kg)' : 'Ração fornecida até esta biometria (kg)'} required>
+          <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.periodFeedKg} onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })} />
+          <small>O app soma este valor ao acumulado anterior automaticamente.</small>
+        </Field>
+
+        <details className="technical-adjustment">
+          <summary>
+            <span>
+              <strong>Taxa de alimentação</strong>
+              <small>Estimativa técnica · toque apenas se precisar ajustar</small>
+            </span>
+            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : '—'}</b>
+          </summary>
+          <div className="technical-adjustment-body">
+            <p>
+              {suggestedRate
+                ? 'Sugestão de ' + formatNumber(suggestedRate, 1) + '% baseada no peso mais próximo observado no histórico do V01. Isso é uma estimativa, não uma regra confirmada.'
+                : 'Sem sugestão disponível para este peso.'}
+            </p>
+            <Field label="Corrigir taxa (%)">
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputMode="decimal"
+                placeholder={suggestedRate ? formatNumber(suggestedRate, 1) : ''}
+                value={form.feedRatePercent}
+                onChange={(e) => setForm({ ...form, feedRatePercent: e.target.value })}
+              />
+            </Field>
+            {form.feedRatePercent && suggestedRate && (
+              <button
+                className="inline-reset-button"
+                type="button"
+                onClick={() => setForm({ ...form, feedRatePercent: '' })}
+              >
+                Voltar para sugestão de {formatNumber(suggestedRate, 1)}%
+              </button>
+            )}
+          </div>
+        </details>
 
         {error && <div className="form-error">{error}</div>}
 
         {preview && (
-          <div className="preview-card">
-            <span className="eyebrow">Prévia automática</span>
+          <div className="preview-card auto-preview-card">
+            <span className="eyebrow">O app calcula para você</span>
             <div className="preview-grid">
-              <Metric label="Dia da biometria" value={String(preview.cultivationDay)} />
+              <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
+              <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
+              <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
               <Metric label="Biomassa" value={formatNumber(round(preview.biomassKg)) + ' kg'} />
-              <Metric label="Sobrevivência" value={formatNumber(round(preview.survivalPercent)) + '%'} />
+              <Metric label="Sobrevivência est." value={formatNumber(round(preview.survivalPercent)) + '%'} />
+              <Metric label="Ração p/100%" value={formatNumber(round(preview.feedFor100Kg)) + ' kg'} />
               <Metric label="FCA" value={formatNumber(round(preview.fca, 2), 2)} />
             </div>
           </div>
         )}
 
-        <button className="primary-button" type="submit">Salvar biometria realizada</button>
+        <button className="primary-button" type="submit">Salvar biometria</button>
       </form>
     </ModalShell>
   )
