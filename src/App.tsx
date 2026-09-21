@@ -219,18 +219,14 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
           <div className="metric-grid compact">
             <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
             <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} />
-            <Metric label="Sobrevivência" value={formatNumber(round(latest.survivalPercent)) + '%'} />
+            <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
             <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
           </div>
         </>
       ) : (
         <div className="empty-inline">
           <strong>Ainda não há biometria realizada.</strong>
-          {nextPlanned && (
-            <span>
-              1ª prevista no relatório: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
-            </span>
-          )}
+          <span>Os indicadores zootécnicos só aparecem depois de uma medição real.</span>
         </div>
       )}
 
@@ -307,14 +303,24 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
             </div>
           </div>
 
+          <div className="metric-section-label">Informado na biometria</div>
           <div className="metric-grid">
             <Metric label="Peso atual" value={formatNumber(latest.currentWeightG, 1) + ' g'} featured />
+            <Metric label="Taxa alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
+            <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+            <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+          </div>
+
+          <div className="metric-section-label calculated-label">Calculado pelo app</div>
+          <div className="metric-grid">
             <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} featured />
             <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
             <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
-            <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
             <Metric label="Ração p/100%" value={formatNumber(round(latest.feedFor100Kg)) + ' kg'} />
-            <Metric label="Ganho desde anterior" value={formatNumber(round(latest.growthG, 1), 1) + ' g'} />
+            <Metric
+              label={latest.previousWeightG === null ? 'Crescimento (1ª bio)' : 'Ganho desde anterior'}
+              value={formatNumber(round(latest.growthG, 1), 1) + ' g'}
+            />
             <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
 
@@ -325,7 +331,9 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
           <div className="empty-icon">≈</div>
           <h2>Aguardando a primeira biometria</h2>
           <p>
-            O V02 existe no relatório e tem dados gerais, mas ainda não possui biometria realizada.
+            {pond.reportReferenceDate
+              ? 'O relatório traz os dados gerais deste viveiro, mas ainda não registra biometria realizada. '
+              : 'O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada. '}
             Não mostramos peso, biomassa, sobrevivência ou FCA até existir medição real.
           </p>
           {nextPlanned && (
@@ -414,47 +422,61 @@ function TrendChart({ pond }: { pond: Pond }) {
   if (history.length < 2) return null
 
   const width = 340
-  const height = 180
-  const padX = 24
-  const padTop = 18
-  const padBottom = 28
+  const height = 190
+  const padX = 22
+  const padTop = 16
+  const padBottom = 30
   const plotHeight = height - padTop - padBottom
+  const plotWidth = width - padX * 2
   const maxValue = Math.max(...history.flatMap((row) => [row.biomassKg, row.accumulatedFeedKg])) * 1.08
+  const groupWidth = plotWidth / history.length
+  const barWidth = Math.min(14, groupWidth * 0.28)
 
-  const point = (value: number, index: number) => {
-    const x = padX + (index * (width - padX * 2)) / Math.max(1, history.length - 1)
-    const y = padTop + plotHeight - (value / maxValue) * plotHeight
-    return { x, y }
-  }
-
-  const biomassPoints = history.map((row, index) => point(row.biomassKg, index))
-  const feedPoints = history.map((row, index) => point(row.accumulatedFeedKg, index))
+  const barHeight = (value: number) => (value / maxValue) * plotHeight
 
   return (
     <article className="chart-card">
       <div className="section-heading chart-heading">
         <div>
           <h2>Ração acumulada × biomassa</h2>
-          <p>Mesmas duas séries do relatório, em kg.</p>
+          <p>Barras agrupadas como no relatório, em kg.</p>
         </div>
       </div>
       <div className="chart-legend">
         <span><i className="dot biomass" /> Biomassa</span>
         <span><i className="dot feed" /> Ração acumulada</span>
       </div>
-      <svg viewBox={'0 0 ' + width + ' ' + height} role="img" aria-label="Gráfico de biomassa e ração acumulada">
+      <svg viewBox={'0 0 ' + width + ' ' + height} role="img" aria-label="Gráfico de barras de biomassa e ração acumulada">
         <line x1={padX} x2={width - padX} y1={padTop + plotHeight} y2={padTop + plotHeight} className="axis-line" />
-        <polyline points={biomassPoints.map((p) => p.x + ',' + p.y).join(' ')} className="chart-line biomass-line" />
-        <polyline points={feedPoints.map((p) => p.x + ',' + p.y).join(' ')} className="chart-line feed-line" />
-        {biomassPoints.map((p, index) => (
-          <circle key={'b-' + index} cx={p.x} cy={p.y} r="3.5" className="chart-point biomass-point" />
-        ))}
-        {feedPoints.map((p, index) => (
-          <circle key={'f-' + index} cx={p.x} cy={p.y} r="3.5" className="chart-point feed-point" />
-        ))}
         {history.map((row, index) => {
-          const p = point(0, index)
-          return <text key={row.id} x={p.x} y={height - 8} textAnchor="middle" className="chart-label">{row.cultivationDay}</text>
+          const center = padX + groupWidth * index + groupWidth / 2
+          const biomassHeight = barHeight(row.biomassKg)
+          const feedHeight = barHeight(row.accumulatedFeedKg)
+          const baseline = padTop + plotHeight
+
+          return (
+            <g key={row.id}>
+              <rect
+                x={center - barWidth - 2}
+                y={baseline - biomassHeight}
+                width={barWidth}
+                height={biomassHeight}
+                rx="2"
+                className="bar-biomass"
+              />
+              <rect
+                x={center + 2}
+                y={baseline - feedHeight}
+                width={barWidth}
+                height={feedHeight}
+                rx="2"
+                className="bar-feed"
+              />
+              <text x={center} y={height - 9} textAnchor="middle" className="chart-label">
+                {row.cultivationDay}
+              </text>
+            </g>
+          )
         })}
       </svg>
     </article>
