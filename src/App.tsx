@@ -294,7 +294,15 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
   )
 }
 
-function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => void }) {
+function PondDetail({
+  pond,
+  onAddBiometry,
+  onEditBiometry,
+}: {
+  pond: Pond
+  onAddBiometry: () => void
+  onEditBiometry: (id: string) => void
+}) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
   const cultivationDays = cultivationDaysAtReference(pond)
@@ -356,6 +364,7 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
               <h2>Última biometria</h2>
               <p>{formatDate(latest.date)} · dia {latest.cultivationDay}</p>
             </div>
+            <button className="text-button" onClick={() => onEditBiometry(latest.id)}>Editar</button>
           </div>
 
           <div className="metric-section-label">Registrado no campo</div>
@@ -421,7 +430,7 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
         </div>
       )}
 
-      <HistorySection pond={pond} />
+      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
       <PlanningSection pond={pond} />
 
       <details className="calculation-details">
@@ -436,7 +445,13 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
   )
 }
 
-function HistorySection({ pond }: { pond: Pond }) {
+function HistorySection({
+  pond,
+  onEditBiometry,
+}: {
+  pond: Pond
+  onEditBiometry: (id: string) => void
+}) {
   const history = calculateHistory(pond)
   if (!history.length) return null
 
@@ -462,6 +477,13 @@ function HistorySection({ pond }: { pond: Pond }) {
               <span><small>Sobrev.</small>{formatNumber(round(row.survivalPercent))}%</span>
               <span><small>FCA</small>{formatNumber(round(row.fca, 2), 2)}</span>
             </div>
+            <button
+              className="history-edit-button"
+              onClick={() => onEditBiometry(row.id)}
+              aria-label={'Editar biometria do dia ' + row.cultivationDay}
+            >
+              Editar
+            </button>
           </article>
         ))}
       </div>
