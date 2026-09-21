@@ -34,6 +34,28 @@ export function cycleDaysAtReference(
   return Math.max(0, daysBetween(pond.cycleStartDate, pond.reportReferenceDate))
 }
 
+export function averageWeightFromSample(totalWeightG: number, sampleCount: number) {
+  if (totalWeightG <= 0 || sampleCount <= 0) return 0
+  return totalWeightG / sampleCount
+}
+
+export function accumulatedFeedFromPeriod(previousAccumulatedKg: number, periodFeedKg: number) {
+  return Math.max(0, previousAccumulatedKg) + Math.max(0, periodFeedKg)
+}
+
+export function suggestFeedRatePercent(
+  currentWeightG: number,
+  reference: Array<Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent'>>,
+) {
+  if (currentWeightG <= 0 || reference.length === 0) return null
+
+  return reference.reduce((nearest, item) => {
+    const nearestDistance = Math.abs(nearest.currentWeightG - currentWeightG)
+    const itemDistance = Math.abs(item.currentWeightG - currentWeightG)
+    return itemDistance < nearestDistance ? item : nearest
+  }).feedRatePercent
+}
+
 export function calculateBiometry(
   pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
   input: BiometryInput,
