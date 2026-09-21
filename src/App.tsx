@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import {
   calculateBiometry,
   calculateHistory,
+  compareBiometriesForDisplay,
   cultivationDaysAtReference,
   cycleDaysAtReference,
   densityPerSquareMeter,
@@ -52,6 +53,23 @@ function formatNumber(value: number, decimals = 0) {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value)
+}
+
+function formatSigned(value: number, decimals = 0) {
+  if (value === 0) return formatNumber(0, decimals)
+  return (value > 0 ? '+' : '') + formatNumber(value, decimals)
+}
+
+function movementWord(value: number) {
+  if (value > 0) return 'subiu'
+  if (value < 0) return 'caiu'
+  return 'ficou igual'
+}
+
+function movementArrow(value: number) {
+  if (value > 0) return '↑'
+  if (value < 0) return '↓'
+  return '→'
 }
 
 function id(prefix: string) {
@@ -189,6 +207,8 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
   const latest = history[history.length - 1]
   const cultivationDays = cultivationDaysAtReference(pond)
   const nextPlanned = plannedAfterLatest(pond)
+  const previous = history.length > 1 ? history[history.length - 2] : null
+  const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
 
   return (
     <button className="pond-card" onClick={onOpen}>
@@ -222,6 +242,11 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
             <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
             <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
           </div>
+          {lastChange && (
+            <div className="card-change-summary">
+              Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g · biomassa {formatSigned(lastChange.biomassKg)} kg
+            </div>
+          )}
         </>
       ) : (
         <div className="empty-inline">
@@ -324,7 +349,7 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
             <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
 
-          <TrendChart pond={pond} />
+          <ChangeSummary pond={pond} />
         </>
       ) : (
         <div className="empty-card">
@@ -417,68 +442,70 @@ function PlanningSection({ pond }: { pond: Pond }) {
   )
 }
 
-function TrendChart({ pond }: { pond: Pond }) {
+function ChangeSummary({ pond }: { pond: Pond }) {
   const history = calculateHistory(pond)
   if (history.length < 2) return null
 
-  const width = 340
-  const height = 190
-  const padX = 22
-  const padTop = 16
-  const padBottom = 30
-  const plotHeight = height - padTop - padBottom
-  const plotWidth = width - padX * 2
-  const maxValue = Math.max(...history.flatMap((row) => [row.biomassKg, row.accumulatedFeedKg])) * 1.08
-  const groupWidth = plotWidth / history.length
-  const barWidth = Math.min(14, groupWidth * 0.28)
+  const previous = history[history.length - 2]
+  const latest = history[history.length - 1]
+  const delta = compareBiometriesForDisplay(previous, latest)
 
-  const barHeight = (value: number) => (value / maxValue) * plotHeight
+  const changes = [
+    {
+      label: 'Peso médio',
+      value: formatSigned(delta.weightG, 1) + ' g',
+      sentence: movementWord(delta.weightG),
+      arrow: movementArrow(delta.weightG),
+    },
+    {
+      label: 'Biomassa estimada',
+      value: formatSigned(delta.biomassKg) + ' kg',
+      sentence: movementWord(delta.biomassKg),
+      arrow: movementArrow(delta.biomassKg),
+    },
+    {
+      label: 'Sobrevivência estimada',
+      value: formatSigned(delta.survivalPercentagePoints) + ' p.p.',
+      sentence: movementWord(delta.survivalPercentagePoints),
+      arrow: movementArrow(delta.survivalPercentagePoints),
+    },
+    {
+      label: 'FCA',
+      value: formatSigned(delta.fca, 2),
+      sentence: movementWord(delta.fca),
+      arrow: movementArrow(delta.fca),
+    },
+  ]
 
   return (
-    <article className="chart-card">
-      <div className="section-heading chart-heading">
+    <article className="change-card">
+      <div className="change-card-head">
         <div>
-          <h2>Ração acumulada × biomassa</h2>
-          <p>Barras agrupadas como no relatório, em kg.</p>
+          <span className="eyebrow">Comparação simples</span>
+          <h2>O que mudou desde a biometria anterior?</h2>
+          <p>
+            {formatDate(previous.date)} → {formatDate(latest.date)}
+          </p>
         </div>
       </div>
-      <div className="chart-legend">
-        <span><i className="dot biomass" /> Biomassa</span>
-        <span><i className="dot feed" /> Ração acumulada</span>
-      </div>
-      <svg viewBox={'0 0 ' + width + ' ' + height} role="img" aria-label="Gráfico de barras de biomassa e ração acumulada">
-        <line x1={padX} x2={width - padX} y1={padTop + plotHeight} y2={padTop + plotHeight} className="axis-line" />
-        {history.map((row, index) => {
-          const center = padX + groupWidth * index + groupWidth / 2
-          const biomassHeight = barHeight(row.biomassKg)
-          const feedHeight = barHeight(row.accumulatedFeedKg)
-          const baseline = padTop + plotHeight
 
-          return (
-            <g key={row.id}>
-              <rect
-                x={center - barWidth - 2}
-                y={baseline - biomassHeight}
-                width={barWidth}
-                height={biomassHeight}
-                rx="2"
-                className="bar-biomass"
-              />
-              <rect
-                x={center + 2}
-                y={baseline - feedHeight}
-                width={barWidth}
-                height={feedHeight}
-                rx="2"
-                className="bar-feed"
-              />
-              <text x={center} y={height - 9} textAnchor="middle" className="chart-label">
-                {row.cultivationDay}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+      <div className="change-grid">
+        {changes.map((item) => (
+          <div className="change-item" key={item.label}>
+            <span className="change-arrow" aria-hidden="true">{item.arrow}</span>
+            <div>
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+              <span>{item.sentence}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="change-footnote">
+        Comparação feita com os mesmos valores arredondados exibidos na tabela do relatório.
+        O app informa apenas a direção da mudança, sem classificar como bom ou ruim.
+      </p>
     </article>
   )
 }

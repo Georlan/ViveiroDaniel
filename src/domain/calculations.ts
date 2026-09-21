@@ -75,6 +75,22 @@ export function calculateHistory(pond: Pond) {
   )
 }
 
+export function compareBiometriesForDisplay(
+  previous: CalculatedBiometry,
+  current: CalculatedBiometry,
+) {
+  return {
+    weightG: round(current.currentWeightG, 1) - round(previous.currentWeightG, 1),
+    biomassKg: round(current.biomassKg) - round(previous.biomassKg),
+    survivalPercentagePoints:
+      round(current.survivalPercent) - round(previous.survivalPercent),
+    fca: round(
+      round(current.fca, 2) - round(previous.fca, 2),
+      2,
+    ),
+  }
+}
+
 export function round(value: number, decimals = 0) {
   const factor = 10 ** decimals
   return Math.round((value + Number.EPSILON) * factor) / factor
