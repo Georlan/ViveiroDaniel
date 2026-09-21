@@ -8,6 +8,7 @@ import {
   cultivationDaysAtReference,
   cycleDaysAtReference,
   densityPerSquareMeter,
+  normalizeBiometryInputs,
   preparationDays,
   round,
   suggestFeedRatePercent,
@@ -88,7 +89,10 @@ function plannedAfterLatest(pond: Pond): PlannedBiometry | null {
   return planned.find((item) => item.date > latest.date) ?? null
 }
 
-type Modal = 'pond' | 'biometry' | null
+type Modal =
+  | { kind: 'pond' }
+  | { kind: 'biometry'; editId?: string }
+  | null
 
 export default function App() {
   const [ponds, setPonds] = useState<Pond[]>(loadPonds)
@@ -96,6 +100,10 @@ export default function App() {
   const [modal, setModal] = useState<Modal>(null)
 
   const selected = ponds.find((pond) => pond.id === selectedId) ?? null
+  const editingBiometry =
+    selected && modal?.kind === 'biometry' && modal.editId
+      ? selected.biometries.find((item) => item.id === modal.editId) ?? null
+      : null
 
   function persist(next: Pond[]) {
     setPonds(next)
@@ -108,13 +116,23 @@ export default function App() {
     setModal(null)
   }
 
-  function addBiometry(input: BiometryInput) {
+  function saveBiometry(input: BiometryInput) {
     if (!selected) return
-    const next = ponds.map((pond) =>
-      pond.id === selected.id
-        ? { ...pond, biometries: [...pond.biometries, input].sort((a, b) => a.date.localeCompare(b.date)) }
-        : pond,
-    )
+
+    const next = ponds.map((pond) => {
+      if (pond.id !== selected.id) return pond
+
+      const exists = pond.biometries.some((item) => item.id === input.id)
+      const biometries = exists
+        ? pond.biometries.map((item) => (item.id === input.id ? input : item))
+        : [...pond.biometries, input]
+
+      return {
+        ...pond,
+        biometries: normalizeBiometryInputs(biometries),
+      }
+    })
+
     persist(next)
     setModal(null)
   }
@@ -137,19 +155,28 @@ export default function App() {
 
       <main>
         {selected ? (
-          <PondDetail pond={selected} onAddBiometry={() => setModal('biometry')} />
+          <PondDetail
+            pond={selected}
+            onAddBiometry={() => setModal({ kind: 'biometry' })}
+            onEditBiometry={(id) => setModal({ kind: 'biometry', editId: id })}
+          />
         ) : (
-          <Dashboard ponds={ponds} onOpen={setSelectedId} onAdd={() => setModal('pond')} />
+          <Dashboard ponds={ponds} onOpen={setSelectedId} onAdd={() => setModal({ kind: 'pond' })} />
         )}
       </main>
 
-      <button className="fab" onClick={() => setModal(selected ? 'biometry' : 'pond')}>
+      <button className="fab" onClick={() => setModal(selected ? { kind: 'biometry' } : { kind: 'pond' })}>
         <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
       </button>
 
-      {modal === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
-      {modal === 'biometry' && selected && (
-        <BiometryForm pond={selected} onClose={() => setModal(null)} onSave={addBiometry} />
+      {modal?.kind === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
+      {modal?.kind === 'biometry' && selected && (
+        <BiometryForm
+          pond={selected}
+          initial={editingBiometry ?? undefined}
+          onClose={() => setModal(null)}
+          onSave={saveBiometry}
+        />
       )}
     </div>
   )
