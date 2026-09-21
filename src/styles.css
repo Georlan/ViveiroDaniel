@@ -1251,3 +1251,112 @@ input:focus-visible {
   fill: var(--coral);
   opacity: 0.88;
 }
+
+
+/* UX v3: substituir leitura de gráfico por comparação direta */
+.card-change-summary {
+  margin-top: 10px;
+  padding: 9px 11px;
+  color: var(--ink);
+  background: #eef6f5;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.change-card {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 5px 18px rgba(28, 70, 66, 0.035);
+}
+
+.change-card-head h2 {
+  margin: 5px 0 0;
+  font-size: 1rem;
+  letter-spacing: -0.025em;
+}
+
+.change-card-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.change-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.change-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  background: var(--surface-soft);
+  border: 1px solid #e7efee;
+  border-radius: 14px;
+}
+
+.change-arrow {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.change-item > div {
+  min-width: 0;
+}
+
+.change-item small,
+.change-item span {
+  display: block;
+}
+
+.change-item small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.59rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-item strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  letter-spacing: -0.02em;
+}
+
+.change-item > div > span {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.change-footnote {
+  margin: 12px 1px 0;
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 360px) {
+  .change-grid {
+    grid-template-columns: 1fr;
+  }
+}
