@@ -8,6 +8,7 @@ import {
   cultivationDaysAtReference,
   cycleDaysAtReference,
   densityPerSquareMeter,
+  normalizeBiometryInputs,
   preparationDays,
   round,
   suggestFeedRatePercent,
@@ -88,7 +89,10 @@ function plannedAfterLatest(pond: Pond): PlannedBiometry | null {
   return planned.find((item) => item.date > latest.date) ?? null
 }
 
-type Modal = 'pond' | 'biometry' | null
+type Modal =
+  | { kind: 'pond' }
+  | { kind: 'biometry'; editId?: string }
+  | null
 
 export default function App() {
   const [ponds, setPonds] = useState<Pond[]>(loadPonds)
@@ -96,6 +100,10 @@ export default function App() {
   const [modal, setModal] = useState<Modal>(null)
 
   const selected = ponds.find((pond) => pond.id === selectedId) ?? null
+  const editingBiometry =
+    selected && modal?.kind === 'biometry' && modal.editId
+      ? selected.biometries.find((item) => item.id === modal.editId) ?? null
+      : null
 
   function persist(next: Pond[]) {
     setPonds(next)
@@ -108,13 +116,23 @@ export default function App() {
     setModal(null)
   }
 
-  function addBiometry(input: BiometryInput) {
+  function saveBiometry(input: BiometryInput) {
     if (!selected) return
-    const next = ponds.map((pond) =>
-      pond.id === selected.id
-        ? { ...pond, biometries: [...pond.biometries, input].sort((a, b) => a.date.localeCompare(b.date)) }
-        : pond,
-    )
+
+    const next = ponds.map((pond) => {
+      if (pond.id !== selected.id) return pond
+
+      const exists = pond.biometries.some((item) => item.id === input.id)
+      const biometries = exists
+        ? pond.biometries.map((item) => (item.id === input.id ? input : item))
+        : [...pond.biometries, input]
+
+      return {
+        ...pond,
+        biometries: normalizeBiometryInputs(biometries),
+      }
+    })
+
     persist(next)
     setModal(null)
   }
@@ -137,19 +155,28 @@ export default function App() {
 
       <main>
         {selected ? (
-          <PondDetail pond={selected} onAddBiometry={() => setModal('biometry')} />
+          <PondDetail
+            pond={selected}
+            onAddBiometry={() => setModal({ kind: 'biometry' })}
+            onEditBiometry={(id) => setModal({ kind: 'biometry', editId: id })}
+          />
         ) : (
-          <Dashboard ponds={ponds} onOpen={setSelectedId} onAdd={() => setModal('pond')} />
+          <Dashboard ponds={ponds} onOpen={setSelectedId} onAdd={() => setModal({ kind: 'pond' })} />
         )}
       </main>
 
-      <button className="fab" onClick={() => setModal(selected ? 'biometry' : 'pond')}>
+      <button className="fab" onClick={() => setModal(selected ? { kind: 'biometry' } : { kind: 'pond' })}>
         <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
       </button>
 
-      {modal === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
-      {modal === 'biometry' && selected && (
-        <BiometryForm pond={selected} onClose={() => setModal(null)} onSave={addBiometry} />
+      {modal?.kind === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
+      {modal?.kind === 'biometry' && selected && (
+        <BiometryForm
+          pond={selected}
+          initial={editingBiometry ?? undefined}
+          onClose={() => setModal(null)}
+          onSave={saveBiometry}
+        />
       )}
     </div>
   )
@@ -267,7 +294,15 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
   )
 }
 
-function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => void }) {
+function PondDetail({
+  pond,
+  onAddBiometry,
+  onEditBiometry,
+}: {
+  pond: Pond
+  onAddBiometry: () => void
+  onEditBiometry: (id: string) => void
+}) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
   const cultivationDays = cultivationDaysAtReference(pond)
@@ -329,6 +364,7 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
               <h2>Última biometria</h2>
               <p>{formatDate(latest.date)} · dia {latest.cultivationDay}</p>
             </div>
+            <button className="text-button" onClick={() => onEditBiometry(latest.id)}>Editar</button>
           </div>
 
           <div className="metric-section-label">Registrado no campo</div>
@@ -394,7 +430,7 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
         </div>
       )}
 
-      <HistorySection pond={pond} />
+      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
       <PlanningSection pond={pond} />
 
       <details className="calculation-details">
@@ -409,7 +445,13 @@ function PondDetail({ pond, onAddBiometry }: { pond: Pond; onAddBiometry: () => 
   )
 }
 
-function HistorySection({ pond }: { pond: Pond }) {
+function HistorySection({
+  pond,
+  onEditBiometry,
+}: {
+  pond: Pond
+  onEditBiometry: (id: string) => void
+}) {
   const history = calculateHistory(pond)
   if (!history.length) return null
 
@@ -435,6 +477,13 @@ function HistorySection({ pond }: { pond: Pond }) {
               <span><small>Sobrev.</small>{formatNumber(round(row.survivalPercent))}%</span>
               <span><small>FCA</small>{formatNumber(round(row.fca, 2), 2)}</span>
             </div>
+            <button
+              className="history-edit-button"
+              onClick={() => onEditBiometry(row.id)}
+              aria-label={'Editar biometria do dia ' + row.cultivationDay}
+            >
+              Editar
+            </button>
           </article>
         ))}
       </div>
@@ -611,25 +660,83 @@ function PondForm({ onClose, onSave }: { onClose: () => void; onSave: (pond: Pon
 
 function BiometryForm({
   pond,
+  initial,
   onClose,
   onSave,
 }: {
   pond: Pond
+  initial?: BiometryInput
+  onClose: () => void
+  onSave: (input: BiometryInput) => void
+}) {
+  const isLegacyEdit = Boolean(
+    initial &&
+      (initial.sampleTotalWeightG == null ||
+        initial.sampleCount == null ||
+        initial.periodFeedKg == null),
+  )
+
+  if (initial && isLegacyEdit) {
+    return (
+      <LegacyBiometryEditForm
+        pond={pond}
+        initial={initial}
+        onClose={onClose}
+        onSave={onSave}
+      />
+    )
+  }
+
+  return (
+    <SimpleBiometryForm
+      pond={pond}
+      initial={initial}
+      onClose={onClose}
+      onSave={onSave}
+    />
+  )
+}
+
+function SimpleBiometryForm({
+  pond,
+  initial,
+  onClose,
+  onSave,
+}: {
+  pond: Pond
+  initial?: BiometryInput
   onClose: () => void
   onSave: (input: BiometryInput) => void
 }) {
   const history = useMemo(() => calculateHistory(pond), [pond])
   const latest = history[history.length - 1]
-  const planned = plannedAfterLatest(pond)
+  const planned = initial ? null : plannedAfterLatest(pond)
+  const historyWithoutInitial = useMemo(
+    () =>
+      calculateHistory({
+        ...pond,
+        biometries: initial
+          ? pond.biometries.filter((item) => item.id !== initial.id)
+          : pond.biometries,
+      }),
+    [pond, initial?.id],
+  )
+
   const [error, setError] = useState('')
   const [form, setForm] = useState({
-    date: '',
-    sampleTotalWeightG: '',
-    sampleCount: '',
-    dailyFeedKg: '',
-    periodFeedKg: '',
-    feedRatePercent: '',
+    date: initial?.date ?? '',
+    sampleTotalWeightG:
+      initial?.sampleTotalWeightG != null ? String(initial.sampleTotalWeightG) : '',
+    sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
+    dailyFeedKg: initial ? String(initial.dailyFeedKg) : '',
+    periodFeedKg: initial?.periodFeedKg != null ? String(initial.periodFeedKg) : '',
+    feedRatePercent: initial ? String(initial.feedRatePercent) : '',
   })
+
+  const draftPrevious = [...historyWithoutInitial]
+    .filter((row) => !form.date || row.date < form.date)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-1)[0]
 
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
@@ -640,14 +747,15 @@ function BiometryForm({
     : suggestedRate ?? 0
   const periodFeedKg = Number(form.periodFeedKg)
   const accumulatedFeedKg = accumulatedFeedFromPeriod(
-    latest?.accumulatedFeedKg ?? 0,
+    draftPrevious?.accumulatedFeedKg ?? 0,
     periodFeedKg,
   )
 
   const parsed: BiometryInput | null =
     form.date && currentWeightG > 0 && effectiveRate > 0 && Number(form.dailyFeedKg) >= 0
       ? {
-          id: 'preview',
+          ...(initial ?? {}),
+          id: initial?.id ?? 'preview',
           date: form.date,
           currentWeightG,
           feedRatePercent: effectiveRate,
@@ -659,7 +767,9 @@ function BiometryForm({
         }
       : null
 
-  const preview = parsed ? calculateBiometry(pond, parsed, latest?.currentWeightG ?? null) : null
+  const preview = parsed
+    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
+    : null
 
   function usePlannedDate() {
     if (!planned) return
@@ -671,13 +781,26 @@ function BiometryForm({
     event.preventDefault()
     setError('')
 
-    if (latest && form.date <= latest.date) {
-      setError('A nova biometria precisa ter data posterior à última biometria realizada.')
+    const duplicateDate = pond.biometries.some(
+      (item) => item.id !== initial?.id && item.date === form.date,
+    )
+    if (duplicateDate) {
+      setError('Já existe uma biometria registrada nesta data.')
+      return
+    }
+
+    if (!initial && latest && form.date <= latest.date) {
+      setError('Para lançar uma nova biometria, use uma data posterior à última registrada.')
       return
     }
 
     if (sampleTotalWeightG <= 0 || sampleCount <= 0) {
       setError('Informe o peso total da amostra e a quantidade de camarões pesados.')
+      return
+    }
+
+    if (periodFeedKg < 0 || Number(form.dailyFeedKg) < 0) {
+      setError('Os valores de ração não podem ser negativos.')
       return
     }
 
@@ -687,7 +810,8 @@ function BiometryForm({
     }
 
     onSave({
-      id: id('bio'),
+      ...(initial ?? {}),
+      id: initial?.id ?? id('bio'),
       date: form.date,
       currentWeightG,
       feedRatePercent: effectiveRate,
@@ -700,8 +824,22 @@ function BiometryForm({
   }
 
   return (
-    <ModalShell title="Registrar biometria" subtitle={pond.name + ' · modo simples'} onClose={onClose}>
+    <ModalShell
+      title={initial ? 'Editar biometria' : 'Registrar biometria'}
+      subtitle={pond.name + ' · modo simples'}
+      onClose={onClose}
+    >
       <form onSubmit={submit} className="form-grid simple-biometry-form">
+        {initial && (
+          <div className="correction-note">
+            <strong>Correção de registro passado</strong>
+            <span>
+              Ao salvar, o app recalcula automaticamente os valores derivados das biometrias seguintes,
+              como crescimento, ração acumulada e FCA quando dependerem deste registro.
+            </span>
+          </div>
+        )}
+
         {planned && (
           <button type="button" className="planned-date-button" onClick={usePlannedDate}>
             <span>Data prevista</span>
@@ -718,7 +856,13 @@ function BiometryForm({
           </div>
         </div>
         <Field label="Data da biometria" required>
-          <input required type="date" min={pond.stockingDate} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <input
+            required
+            type="date"
+            min={pond.stockingDate}
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
         </Field>
 
         <div className="form-step">
@@ -730,10 +874,26 @@ function BiometryForm({
         </div>
         <div className="two-cols">
           <Field label="Peso total da amostra (g)" required>
-            <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.sampleTotalWeightG} onChange={(e) => setForm({ ...form, sampleTotalWeightG: e.target.value })} />
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={form.sampleTotalWeightG}
+              onChange={(e) => setForm({ ...form, sampleTotalWeightG: e.target.value })}
+            />
           </Field>
           <Field label="Quantidade de camarões" required>
-            <input required type="number" min="1" step="1" inputMode="numeric" value={form.sampleCount} onChange={(e) => setForm({ ...form, sampleCount: e.target.value })} />
+            <input
+              required
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              value={form.sampleCount}
+              onChange={(e) => setForm({ ...form, sampleCount: e.target.value })}
+            />
           </Field>
         </div>
 
@@ -743,7 +903,11 @@ function BiometryForm({
             <strong>{formatNumber(currentWeightG, 2)} g</strong>
             <small>
               {formatNumber(sampleTotalWeightG, 0)} g ÷ {formatNumber(sampleCount)} animais
-              {latest ? ' · crescimento ' + formatSigned(currentWeightG - latest.currentWeightG, 2) + ' g' : ''}
+              {draftPrevious
+                ? ' · crescimento ' +
+                  formatSigned(currentWeightG - draftPrevious.currentWeightG, 2) +
+                  ' g'
+                : ''}
             </small>
           </div>
         )}
@@ -756,12 +920,37 @@ function BiometryForm({
           </div>
         </div>
         <Field label="Ração por dia agora (kg)" required>
-          <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.dailyFeedKg} onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })} />
+          <input
+            required
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            value={form.dailyFeedKg}
+            onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
+          />
           <small>É a quantidade diária usada no momento da biometria.</small>
         </Field>
-        <Field label={latest ? 'Ração desde a biometria anterior (kg)' : 'Ração fornecida até esta biometria (kg)'} required>
-          <input required type="number" min="0" step="0.01" inputMode="decimal" value={form.periodFeedKg} onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })} />
-          <small>O app soma este valor ao acumulado anterior automaticamente.</small>
+        <Field
+          label={
+            draftPrevious
+              ? 'Ração desde a biometria anterior (kg)'
+              : 'Ração fornecida até esta biometria (kg)'
+          }
+          required
+        >
+          <input
+            required
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            value={form.periodFeedKg}
+            onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
+          />
+          <small>
+            O app soma este valor ao acumulado anterior e refaz a cadeia seguinte se você estiver corrigindo um registro antigo.
+          </small>
         </Field>
 
         <details className="technical-adjustment">
@@ -775,10 +964,12 @@ function BiometryForm({
           <div className="technical-adjustment-body">
             <p>
               {suggestedRate
-                ? 'Sugestão de ' + formatNumber(suggestedRate, 1) + '% baseada no peso mais próximo observado no histórico do V01. Isso é uma estimativa, não uma regra confirmada.'
+                ? 'Sugestão de ' +
+                  formatNumber(suggestedRate, 1) +
+                  '% baseada no peso mais próximo observado no histórico do V01. Isso é uma estimativa, não uma regra confirmada.'
                 : 'Sem sugestão disponível para este peso.'}
             </p>
-            <Field label="Corrigir taxa (%)">
+            <Field label="Taxa usada (%)">
               <input
                 type="number"
                 min="0.01"
@@ -795,7 +986,7 @@ function BiometryForm({
                 type="button"
                 onClick={() => setForm({ ...form, feedRatePercent: '' })}
               >
-                Voltar para sugestão de {formatNumber(suggestedRate, 1)}%
+                Usar sugestão de {formatNumber(suggestedRate, 1)}%
               </button>
             )}
           </div>
@@ -805,7 +996,9 @@ function BiometryForm({
 
         {preview && (
           <div className="preview-card auto-preview-card">
-            <span className="eyebrow">O app calcula para você</span>
+            <span className="eyebrow">
+              {initial ? 'Resultado após a correção' : 'O app calcula para você'}
+            </span>
             <div className="preview-grid">
               <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
               <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
@@ -818,7 +1011,186 @@ function BiometryForm({
           </div>
         )}
 
-        <button className="primary-button" type="submit">Salvar biometria</button>
+        <button className="primary-button" type="submit">
+          {initial ? 'Salvar correção' : 'Salvar biometria'}
+        </button>
+      </form>
+    </ModalShell>
+  )
+}
+
+function LegacyBiometryEditForm({
+  pond,
+  initial,
+  onClose,
+  onSave,
+}: {
+  pond: Pond
+  initial: BiometryInput
+  onClose: () => void
+  onSave: (input: BiometryInput) => void
+}) {
+  const historyWithoutInitial = useMemo(
+    () =>
+      calculateHistory({
+        ...pond,
+        biometries: pond.biometries.filter((item) => item.id !== initial.id),
+      }),
+    [pond, initial.id],
+  )
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    date: initial.date,
+    currentWeightG: String(initial.currentWeightG),
+    feedRatePercent: String(initial.feedRatePercent),
+    dailyFeedKg: String(initial.dailyFeedKg),
+    accumulatedFeedKg: String(initial.accumulatedFeedKg),
+  })
+
+  const draftPrevious = [...historyWithoutInitial]
+    .filter((row) => row.date < form.date)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-1)[0]
+
+  const parsed: BiometryInput | null =
+    form.date &&
+    Number(form.currentWeightG) > 0 &&
+    Number(form.feedRatePercent) > 0 &&
+    Number(form.dailyFeedKg) >= 0 &&
+    Number(form.accumulatedFeedKg) >= 0
+      ? {
+          ...initial,
+          date: form.date,
+          currentWeightG: Number(form.currentWeightG),
+          feedRatePercent: Number(form.feedRatePercent),
+          dailyFeedKg: Number(form.dailyFeedKg),
+          accumulatedFeedKg: Number(form.accumulatedFeedKg),
+        }
+      : null
+
+  const preview = parsed
+    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
+    : null
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+
+    const duplicateDate = pond.biometries.some(
+      (item) => item.id !== initial.id && item.date === form.date,
+    )
+    if (duplicateDate) {
+      setError('Já existe uma biometria registrada nesta data.')
+      return
+    }
+
+    if (
+      Number(form.currentWeightG) <= 0 ||
+      Number(form.feedRatePercent) <= 0 ||
+      Number(form.dailyFeedKg) < 0 ||
+      Number(form.accumulatedFeedKg) < 0
+    ) {
+      setError('Revise os valores informados antes de salvar.')
+      return
+    }
+
+    onSave({
+      ...initial,
+      date: form.date,
+      currentWeightG: Number(form.currentWeightG),
+      feedRatePercent: Number(form.feedRatePercent),
+      dailyFeedKg: Number(form.dailyFeedKg),
+      accumulatedFeedKg: Number(form.accumulatedFeedKg),
+    })
+  }
+
+  return (
+    <ModalShell title="Editar biometria" subtitle={pond.name + ' · registro histórico'} onClose={onClose}>
+      <form onSubmit={submit} className="form-grid">
+        <div className="correction-note historical">
+          <strong>Registro importado do relatório</strong>
+          <span>
+            Este registro antigo não possui peso total da amostra nem ração do período salvos.
+            Por isso a correção usa os campos existentes no relatório. Os cálculos dependentes serão refeitos.
+          </span>
+        </div>
+
+        <Field label="Data da biometria" required>
+          <input
+            required
+            type="date"
+            min={pond.stockingDate}
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
+        </Field>
+
+        <div className="two-cols">
+          <Field label="Peso médio (g)" required>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={form.currentWeightG}
+              onChange={(e) => setForm({ ...form, currentWeightG: e.target.value })}
+            />
+          </Field>
+          <Field label="Taxa alimentação (%)" required>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={form.feedRatePercent}
+              onChange={(e) => setForm({ ...form, feedRatePercent: e.target.value })}
+            />
+          </Field>
+        </div>
+
+        <div className="two-cols">
+          <Field label="Ração/dia (kg)" required>
+            <input
+              required
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={form.dailyFeedKg}
+              onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
+            />
+          </Field>
+          <Field label="Ração acumulada (kg)" required>
+            <input
+              required
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              value={form.accumulatedFeedKg}
+              onChange={(e) => setForm({ ...form, accumulatedFeedKg: e.target.value })}
+            />
+          </Field>
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+
+        {preview && (
+          <div className="preview-card auto-preview-card">
+            <span className="eyebrow">Resultado após a correção</span>
+            <div className="preview-grid">
+              <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
+              <Metric label="Biomassa" value={formatNumber(round(preview.biomassKg)) + ' kg'} />
+              <Metric label="Sobrevivência est." value={formatNumber(round(preview.survivalPercent)) + '%'} />
+              <Metric label="Ração p/100%" value={formatNumber(round(preview.feedFor100Kg)) + ' kg'} />
+              <Metric label="FCA" value={formatNumber(round(preview.fca, 2), 2)} />
+            </div>
+          </div>
+        )}
+
+        <button className="primary-button" type="submit">Salvar correção</button>
       </form>
     </ModalShell>
   )

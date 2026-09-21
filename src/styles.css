@@ -1519,3 +1519,67 @@ input:focus-visible {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+
+/* UX v5: correção segura de biometrias anteriores */
+.history-card {
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.history-edit-button {
+  align-self: center;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--primary);
+  background: #eef7f5;
+  border: 1px solid #d5e9e5;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.history-edit-button:hover {
+  background: var(--primary-soft);
+}
+
+.correction-note {
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
+  color: #315b57;
+  background: #eef7f5;
+  border: 1px solid #d4e9e5;
+  border-radius: 14px;
+}
+
+.correction-note.historical {
+  color: #66520e;
+  background: #fff8df;
+  border-color: #ead991;
+}
+
+.correction-note strong {
+  font-size: 0.76rem;
+}
+
+.correction-note span {
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 430px) {
+  .history-card {
+    grid-template-columns: 1fr auto;
+  }
+
+  .history-values {
+    grid-column: 1 / -1;
+  }
+
+  .history-edit-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}

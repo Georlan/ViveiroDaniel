@@ -56,6 +56,37 @@ export function suggestFeedRatePercent(
   }).feedRatePercent
 }
 
+export function normalizeBiometryInputs(biometries: BiometryInput[]) {
+  const ordered = [...biometries].sort((a, b) => a.date.localeCompare(b.date))
+  let previousAccumulatedKg = 0
+
+  return ordered.map((input) => {
+    const normalized: BiometryInput = { ...input }
+
+    if (
+      input.sampleTotalWeightG != null &&
+      input.sampleCount != null &&
+      input.sampleTotalWeightG > 0 &&
+      input.sampleCount > 0
+    ) {
+      normalized.currentWeightG = averageWeightFromSample(
+        input.sampleTotalWeightG,
+        input.sampleCount,
+      )
+    }
+
+    if (input.periodFeedKg != null) {
+      normalized.accumulatedFeedKg = accumulatedFeedFromPeriod(
+        previousAccumulatedKg,
+        input.periodFeedKg,
+      )
+    }
+
+    previousAccumulatedKg = normalized.accumulatedFeedKg
+    return normalized
+  })
+}
+
 export function calculateBiometry(
   pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
   input: BiometryInput,
@@ -87,7 +118,7 @@ export function calculateBiometry(
 }
 
 export function calculateHistory(pond: Pond) {
-  const ordered = [...pond.biometries].sort((a, b) => a.date.localeCompare(b.date))
+  const ordered = normalizeBiometryInputs(pond.biometries)
   return ordered.map((input, index) =>
     calculateBiometry(
       pond,
