@@ -7,6 +7,7 @@ import {
   cultivationDaysAtReference,
   cycleDaysAtReference,
   densityPerSquareMeter,
+  normalizeBiometryInputs,
   preparationDays,
   round,
   suggestFeedRatePercent,
@@ -51,6 +52,85 @@ describe('report-backed calculations', () => {
     expect(suggestFeedRatePercent(4.9, v01.biometries)).toBe(4.5)
     expect(suggestFeedRatePercent(0, v01.biometries)).toBeNull()
     expect(suggestFeedRatePercent(5, [])).toBeNull()
+  })
+
+  it('recalculates later accumulated feed when an older simple biometry is corrected', () => {
+    const chain = normalizeBiometryInputs([
+      {
+        id: 'legacy',
+        date: '2026-07-15',
+        currentWeightG: 7.1,
+        feedRatePercent: 3.5,
+        dailyFeedKg: 18,
+        accumulatedFeedKg: 788,
+      },
+      {
+        id: 'simple-1',
+        date: '2026-07-22',
+        currentWeightG: 0,
+        feedRatePercent: 3.5,
+        dailyFeedKg: 15,
+        accumulatedFeedKg: 0,
+        sampleTotalWeightG: 303,
+        sampleCount: 33,
+        periodFeedKg: 70,
+      },
+      {
+        id: 'simple-2',
+        date: '2026-07-29',
+        currentWeightG: 0,
+        feedRatePercent: 3.5,
+        dailyFeedKg: 20,
+        accumulatedFeedKg: 0,
+        sampleTotalWeightG: 663,
+        sampleCount: 65,
+        periodFeedKg: 90,
+      },
+    ])
+
+    expect(chain[1].currentWeightG).toBeCloseTo(9.1818, 4)
+    expect(chain[1].accumulatedFeedKg).toBe(858)
+    expect(chain[2].currentWeightG).toBeCloseTo(10.2, 4)
+    expect(chain[2].accumulatedFeedKg).toBe(948)
+  })
+
+  it('keeps explicit legacy accumulated values as anchors when rebuilding the chain', () => {
+    const chain = normalizeBiometryInputs([
+      {
+        id: 'simple-before',
+        date: '2026-06-01',
+        currentWeightG: 0,
+        feedRatePercent: 5,
+        dailyFeedKg: 10,
+        accumulatedFeedKg: 0,
+        sampleTotalWeightG: 100,
+        sampleCount: 20,
+        periodFeedKg: 50,
+      },
+      {
+        id: 'legacy-anchor',
+        date: '2026-06-08',
+        currentWeightG: 6,
+        feedRatePercent: 4,
+        dailyFeedKg: 12,
+        accumulatedFeedKg: 300,
+      },
+      {
+        id: 'simple-after',
+        date: '2026-06-15',
+        currentWeightG: 0,
+        feedRatePercent: 4,
+        dailyFeedKg: 13,
+        accumulatedFeedKg: 0,
+        sampleTotalWeightG: 140,
+        sampleCount: 20,
+        periodFeedKg: 40,
+      },
+    ])
+
+    expect(chain[0].accumulatedFeedKg).toBe(50)
+    expect(chain[1].accumulatedFeedKg).toBe(300)
+    expect(chain[2].accumulatedFeedKg).toBe(340)
   })
 
   it('keeps last-change summaries consistent with displayed report values', () => {
