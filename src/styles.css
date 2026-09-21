@@ -1583,3 +1583,149 @@ input:focus-visible {
     grid-row: 1;
   }
 }
+
+
+/* UX v6: fonte compartilhada gratuita entre aparelhos */
+.device-badge.synced {
+  color: #0d635d;
+  background: #dff3ef;
+}
+
+.sync-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 5px 18px rgba(28, 70, 66, 0.035);
+}
+
+.sync-card.connected {
+  background: #f4fbf9;
+  border-color: #d2e9e5;
+}
+
+.sync-card.has-error {
+  background: #fff9f4;
+  border-color: #efd8c3;
+}
+
+.sync-card-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sync-card-copy > strong {
+  font-size: 0.86rem;
+}
+
+.sync-card-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.sync-card-copy small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.sync-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  background: #9caeab;
+  border-radius: 999px;
+}
+
+.sync-dot.synced {
+  background: #1b9c7f;
+}
+
+.sync-dot.connecting,
+.sync-dot.syncing {
+  background: #d8a91e;
+}
+
+.sync-dot.error {
+  background: #c75d45;
+}
+
+.sync-message {
+  display: block;
+  margin-top: 2px;
+  color: #4a6561 !important;
+  font-weight: 650;
+}
+
+.sync-card.has-error .sync-message {
+  color: #8a513f !important;
+}
+
+.sync-primary-action {
+  min-width: 100px;
+}
+
+.sync-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.sync-actions .secondary-button {
+  white-space: nowrap;
+}
+
+.sync-text-button {
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.sync-text-button.danger {
+  color: #8a5b52;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 430px) {
+  .sync-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sync-primary-action {
+    width: 100%;
+  }
+
+  .sync-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sync-actions .secondary-button {
+    grid-column: 1 / -1;
+  }
+}

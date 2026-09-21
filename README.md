@@ -60,12 +60,16 @@ Por exemplo:
 - Planejamento de biometria.
 - Comparação direta entre biometrías no lugar do gráfico principal.
 - Histórico completo.
-- Persistência local no navegador com localStorage.
+- Persistência local no navegador com localStorage quando o compartilhamento está desligado.
+- Sincronização opcional entre aparelhos usando Pages Functions + Cloudflare D1 como fonte canônica.
+- Link compartilhado com chave aleatória, controle de versão e detecção de conflito.
 - Testes matemáticos contra as seis linhas preenchidas do V01.
 - Testes do fluxo simples de amostra e ração do período.
 - Build estático pronto para Cloudflare Pages.
 
-Não há backend, login ou sincronização em nuvem nesta fase.
+Não há servidor dedicado. A sincronização compartilhada é opcional e usa recursos serverless do próprio Cloudflare Pages/D1.
+
+Quando ativada, o D1 vira a fonte canônica e o localStorage fica como cache local. O segundo aparelho entra pela opção **Copiar link** no dashboard. Veja `docs/cloudflare-sync.md` para vincular gratuitamente um D1 ao projeto.
 
 ## Cálculos confirmados pelo relatório
 
@@ -105,9 +109,10 @@ O resultado fica em dist/.
 - Build command: npm run build
 - Build output directory: dist
 - Node.js: 20+
-- Variáveis de ambiente: nenhuma nesta fase
+- Variáveis de ambiente: nenhuma obrigatória
+- Binding opcional para sincronização: D1 com nome **DB**
 
-O arquivo public/_redirects mantém o fallback da SPA para index.html.
+O arquivo public/_redirects mantém o fallback da SPA para index.html. A rota `/api/state` é atendida por Pages Functions quando o D1 está vinculado.
 
 ## Regra do produto
 

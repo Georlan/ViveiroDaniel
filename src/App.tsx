@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   accumulatedFeedFromPeriod,
   averageWeightFromSample,
@@ -15,6 +15,18 @@ import {
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
 import type { BiometryInput, PlannedBiometry, Pond } from './types'
+import {
+  buildShareUrl,
+  clearStoredSyncToken,
+  consumeInviteTokenFromUrl,
+  createSyncToken,
+  fetchRemoteState,
+  getStoredSyncToken,
+  saveRemoteState,
+  storeSyncToken,
+  SyncApiError,
+  type RemoteState,
+} from './sync'
 
 const STORAGE_KEY = 'viveiro-daniel:v1'
 
@@ -94,10 +106,28 @@ type Modal =
   | { kind: 'biometry'; editId?: string }
   | null
 
+type SyncStatus = 'local' | 'connecting' | 'synced' | 'syncing' | 'error'
+
+function syncStatusLabel(status: SyncStatus) {
+  if (status === 'connecting') return 'Conectando…'
+  if (status === 'syncing') return 'Salvando…'
+  if (status === 'synced') return 'Compartilhado'
+  if (status === 'error') return 'Verificar sync'
+  return 'Neste aparelho'
+}
+
 export default function App() {
   const [ponds, setPonds] = useState<Pond[]>(loadPonds)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [modal, setModal] = useState<Modal>(null)
+  const [syncToken, setSyncToken] = useState<string | null>(() => getStoredSyncToken())
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(
+    getStoredSyncToken() ? 'connecting' : 'local',
+  )
+  const [syncMessage, setSyncMessage] = useState('')
+  const [syncUpdatedAt, setSyncUpdatedAt] = useState<string | null>(null)
+  const syncVersionRef = useRef(0)
+  const syncBusyRef = useRef(false)
 
   const selected = ponds.find((pond) => pond.id === selectedId) ?? null
   const editingBiometry =
@@ -105,18 +135,185 @@ export default function App() {
       ? selected.biometries.find((item) => item.id === modal.editId) ?? null
       : null
 
-  function persist(next: Pond[]) {
+  function cacheLocally(next: Pond[]) {
     setPonds(next)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   }
 
-  function addPond(pond: Pond) {
-    persist([...ponds, pond])
+  function applyRemote(remote: RemoteState) {
+    const next = remote.ponds.map(enrichWithReportMetadata)
+    syncVersionRef.current = remote.version
+    cacheLocally(next)
+    setSyncUpdatedAt(remote.updatedAt)
+    setSyncStatus('synced')
+  }
+
+  function syncErrorMessage(error: unknown) {
+    if (error instanceof SyncApiError) return error.message
+    return 'Não foi possível sincronizar agora.'
+  }
+
+  useEffect(() => {
+    const inviteToken = consumeInviteTokenFromUrl()
+    if (!inviteToken) return
+
+    storeSyncToken(inviteToken)
+    setSyncToken(inviteToken)
+    setSyncStatus('connecting')
+    setSyncMessage('Entrando na fonte compartilhada…')
+  }, [])
+
+  useEffect(() => {
+    if (!syncToken) {
+      syncVersionRef.current = 0
+      setSyncStatus('local')
+      return
+    }
+
+    const token = syncToken
+    let cancelled = false
+
+    async function connect() {
+      if (syncBusyRef.current) return
+      syncBusyRef.current = true
+      setSyncStatus('connecting')
+
+      try {
+        const remote = await fetchRemoteState(token)
+        if (cancelled) return
+
+        if (!remote) {
+          setSyncStatus('error')
+          setSyncMessage(
+            'Este link compartilhado ainda não possui uma fonte criada. Ative o compartilhamento no aparelho principal primeiro.',
+          )
+          return
+        }
+
+        applyRemote(remote)
+        setSyncMessage('Usando a mesma fonte de dados em todos os aparelhos com este link.')
+      } catch (error) {
+        if (cancelled) return
+        setSyncStatus('error')
+        setSyncMessage(syncErrorMessage(error))
+      } finally {
+        syncBusyRef.current = false
+      }
+    }
+
+    void connect()
+
+    return () => {
+      cancelled = true
+    }
+  }, [syncToken])
+
+  useEffect(() => {
+    if (!syncToken) return
+
+    const token = syncToken
+    let stopped = false
+
+    async function pullLatest() {
+      if (
+        stopped ||
+        syncBusyRef.current ||
+        document.visibilityState !== 'visible'
+      ) {
+        return
+      }
+
+      syncBusyRef.current = true
+      try {
+        const remote = await fetchRemoteState(token)
+        if (!remote || stopped) return
+
+        if (remote.version > syncVersionRef.current) {
+          applyRemote(remote)
+          setSyncMessage('Atualizado com as mudanças do outro aparelho.')
+        }
+      } catch (error) {
+        if (!stopped) {
+          setSyncStatus('error')
+          setSyncMessage(syncErrorMessage(error))
+        }
+      } finally {
+        syncBusyRef.current = false
+      }
+    }
+
+    const timer = window.setInterval(() => {
+      void pullLatest()
+    }, 15_000)
+
+    const onFocus = () => void pullLatest()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void pullLatest()
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [syncToken])
+
+  async function persist(next: Pond[]) {
+    if (!syncToken) {
+      cacheLocally(next)
+      return true
+    }
+
+    if (syncBusyRef.current) {
+      setSyncStatus('error')
+      setSyncMessage('Aguarde a sincronização terminar e tente salvar novamente.')
+      return false
+    }
+
+    syncBusyRef.current = true
+    setSyncStatus('syncing')
+    setSyncMessage('Salvando na fonte compartilhada…')
+
+    try {
+      const remote = await saveRemoteState(
+        syncToken,
+        next,
+        syncVersionRef.current,
+      )
+      applyRemote(remote)
+      setSyncMessage('Salvo. Os outros aparelhos receberão esta versão automaticamente.')
+      return true
+    } catch (error) {
+      if (error instanceof SyncApiError && error.code === 'conflict' && error.remote) {
+        applyRemote(error.remote)
+        setSyncStatus('error')
+        setSyncMessage(
+          'O outro aparelho salvou uma mudança primeiro. A versão mais nova foi carregada; revise e salve novamente.',
+        )
+        return false
+      }
+
+      setSyncStatus('error')
+      setSyncMessage(syncErrorMessage(error))
+      return false
+    } finally {
+      syncBusyRef.current = false
+    }
+  }
+
+  async function addPond(pond: Pond) {
+    const saved = await persist([...ponds, pond])
+    if (!saved) return
+
     setSelectedId(pond.id)
     setModal(null)
   }
 
-  function saveBiometry(input: BiometryInput) {
+  async function saveBiometry(input: BiometryInput) {
     if (!selected) return
 
     const next = ponds.map((pond) => {
@@ -133,8 +330,83 @@ export default function App() {
       }
     })
 
-    persist(next)
-    setModal(null)
+    const saved = await persist(next)
+    if (saved) setModal(null)
+  }
+
+  async function activateSharing() {
+    if (syncBusyRef.current) return
+
+    syncBusyRef.current = true
+    setSyncStatus('connecting')
+    setSyncMessage('Criando a fonte compartilhada…')
+
+    const token = createSyncToken()
+
+    try {
+      const remote = await saveRemoteState(token, ponds, 0)
+      storeSyncToken(token)
+      setSyncToken(token)
+      applyRemote(remote)
+      setSyncMessage(
+        'Compartilhamento ativado. Copie o link e envie apenas para quem deve editar estes dados.',
+      )
+    } catch (error) {
+      clearStoredSyncToken()
+      setSyncToken(null)
+      setSyncStatus('local')
+      setSyncMessage(syncErrorMessage(error))
+    } finally {
+      syncBusyRef.current = false
+    }
+  }
+
+  async function copyShareLink() {
+    if (!syncToken) return
+    const url = buildShareUrl(syncToken)
+
+    try {
+      await navigator.clipboard.writeText(url)
+      setSyncMessage('Link compartilhado copiado. Quem abrir esse link usará a mesma fonte.')
+    } catch {
+      setSyncMessage('Não foi possível copiar automaticamente. Tente novamente pelo navegador.')
+    }
+  }
+
+  async function syncNow() {
+    if (!syncToken || syncBusyRef.current) return
+
+    syncBusyRef.current = true
+    setSyncStatus('connecting')
+    setSyncMessage('Buscando a versão mais recente…')
+
+    try {
+      const remote = await fetchRemoteState(syncToken)
+      if (!remote) {
+        setSyncStatus('error')
+        setSyncMessage('A fonte compartilhada não foi encontrada.')
+        return
+      }
+
+      applyRemote(remote)
+      setSyncMessage('Dados atualizados com a fonte compartilhada.')
+    } catch (error) {
+      setSyncStatus('error')
+      setSyncMessage(syncErrorMessage(error))
+    } finally {
+      syncBusyRef.current = false
+    }
+  }
+
+  function disconnectSync() {
+    clearStoredSyncToken()
+    setSyncToken(null)
+    syncVersionRef.current = 0
+    setSyncUpdatedAt(null)
+    setSyncStatus('local')
+    setSyncMessage(
+      'Este aparelho voltou ao modo local. A cópia compartilhada continua existindo para quem tiver o link.',
+    )
   }
 
   return (
@@ -149,7 +421,9 @@ export default function App() {
             ←
           </button>
         ) : (
-          <span className="device-badge">Neste aparelho</span>
+          <span className={syncToken ? 'device-badge synced' : 'device-badge'}>
+            {syncStatusLabel(syncStatus)}
+          </span>
         )}
       </header>
 
@@ -161,7 +435,19 @@ export default function App() {
             onEditBiometry={(id) => setModal({ kind: 'biometry', editId: id })}
           />
         ) : (
-          <Dashboard ponds={ponds} onOpen={setSelectedId} onAdd={() => setModal({ kind: 'pond' })} />
+          <Dashboard
+            ponds={ponds}
+            onOpen={setSelectedId}
+            onAdd={() => setModal({ kind: 'pond' })}
+            syncToken={syncToken}
+            syncStatus={syncStatus}
+            syncMessage={syncMessage}
+            syncUpdatedAt={syncUpdatedAt}
+            onActivateSharing={() => void activateSharing()}
+            onCopyShareLink={() => void copyShareLink()}
+            onSyncNow={() => void syncNow()}
+            onDisconnectSync={disconnectSync}
+          />
         )}
       </main>
 
@@ -186,10 +472,26 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
+  syncToken,
+  syncStatus,
+  syncMessage,
+  syncUpdatedAt,
+  onActivateSharing,
+  onCopyShareLink,
+  onSyncNow,
+  onDisconnectSync,
 }: {
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
+  syncToken: string | null
+  syncStatus: SyncStatus
+  syncMessage: string
+  syncUpdatedAt: string | null
+  onActivateSharing: () => void
+  onCopyShareLink: () => void
+  onSyncNow: () => void
+  onDisconnectSync: () => void
 }) {
   const withBiometry = ponds.filter((pond) => pond.biometries.length > 0).length
 
@@ -210,6 +512,17 @@ function Dashboard({
         </div>
       </div>
 
+      <SyncPanel
+        connected={Boolean(syncToken)}
+        status={syncStatus}
+        message={syncMessage}
+        updatedAt={syncUpdatedAt}
+        onActivate={onActivateSharing}
+        onCopy={onCopyShareLink}
+        onRefresh={onSyncNow}
+        onDisconnect={onDisconnectSync}
+      />
+
       <div className="section-heading compact-heading">
         <div>
           <h2>Produção em andamento</h2>
@@ -225,10 +538,80 @@ function Dashboard({
       </div>
 
       <div className="storage-note">
-        <strong>Dados salvos neste aparelho</strong>
-        <span>Sem login e sem sincronização em nuvem nesta versão.</span>
+        <strong>{syncToken ? 'Fonte compartilhada ativa' : 'Dados salvos neste aparelho'}</strong>
+        <span>
+          {syncToken
+            ? 'O navegador mantém uma cópia local, mas a versão canônica fica na fonte compartilhada.'
+            : 'Sem compartilhamento, cada aparelho possui sua própria cópia local.'}
+        </span>
       </div>
     </section>
+  )
+}
+
+function SyncPanel({
+  connected,
+  status,
+  message,
+  updatedAt,
+  onActivate,
+  onCopy,
+  onRefresh,
+  onDisconnect,
+}: {
+  connected: boolean
+  status: SyncStatus
+  message: string
+  updatedAt: string | null
+  onActivate: () => void
+  onCopy: () => void
+  onRefresh: () => void
+  onDisconnect: () => void
+}) {
+  if (!connected) {
+    return (
+      <article className="sync-card">
+        <div className="sync-card-copy">
+          <span className="eyebrow">Dois aparelhos</span>
+          <strong>Usar a mesma fonte de dados</strong>
+          <p>
+            Ative o compartilhamento para o dono e o irmão abrirem o mesmo link e editarem a mesma base.
+          </p>
+          {message && <small className="sync-message">{message}</small>}
+        </div>
+        <button
+          className="secondary-button sync-primary-action"
+          onClick={onActivate}
+          disabled={status === 'connecting' || status === 'syncing'}
+        >
+          {status === 'connecting' ? 'Ativando…' : 'Ativar grátis'}
+        </button>
+      </article>
+    )
+  }
+
+  return (
+    <article className={'sync-card connected ' + (status === 'error' ? 'has-error' : '')}>
+      <div className="sync-card-copy">
+        <div className="sync-title-row">
+          <span className="eyebrow">Fonte compartilhada</span>
+          <span className={'sync-dot ' + status} />
+        </div>
+        <strong>{syncStatusLabel(status)}</strong>
+        <p>
+          As alterações salvas aqui são a fonte canônica para todos os aparelhos que possuem o link.
+        </p>
+        {updatedAt && (
+          <small>Última versão: {new Date(updatedAt).toLocaleString('pt-BR')}</small>
+        )}
+        {message && <small className="sync-message">{message}</small>}
+      </div>
+      <div className="sync-actions">
+        <button className="secondary-button" onClick={onCopy}>Copiar link</button>
+        <button className="sync-text-button" onClick={onRefresh}>Atualizar</button>
+        <button className="sync-text-button danger" onClick={onDisconnect}>Só neste aparelho</button>
+      </div>
+    </article>
   )
 }
 
