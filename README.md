@@ -54,9 +54,11 @@ Por exemplo:
 ## Estado atual
 
 - Dashboard mobile-first.
-- V01 e V02 preservados conforme o relatório.
+- V01 como viveiro ativo do MVP; V02 retirado do fluxo por enquanto.
 - Cadastro de viveiro.
+- Edição dos dados iniciais do viveiro, incluindo população inicial.
 - Registro de biometria em modo simples.
+- Cadastro de aplicações de produtos por data, quantidade e unidade, com resumo mensal.
 - Planejamento de biometria.
 - Comparação direta entre biometrías no lugar do gráfico principal.
 - Histórico completo.
