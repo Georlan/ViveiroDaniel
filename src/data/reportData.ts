@@ -28,7 +28,13 @@ export const reportPonds: Pond[] = [
       { cultivationDay: 145, date: '2026-09-30' },
       { cultivationDay: 152, date: '2026-10-07' },
     ],
-    productUsages: [],
+    productUsages: [
+      { id: 'usage-20260906-n-control', date: '2026-09-06', product: 'N-CONTROL', quantity: 200, unit: 'g' },
+      { id: 'usage-20260906-acucar', date: '2026-09-06', product: 'Açúcar', quantity: 2, unit: 'kg' },
+      { id: 'usage-20260908-tcp', date: '2026-09-08', product: 'TCP', quantity: 2, unit: 'L' },
+      { id: 'usage-20260911-n-aqua', date: '2026-09-11', product: 'N-AQUA', quantity: 200, unit: 'g' },
+      { id: 'usage-20260916-tcp', date: '2026-09-16', product: 'TCP', quantity: 2, unit: 'L' },
+    ],
     biometries: [
       { id: 'v01-36', date: '2026-06-13', currentWeightG: 3.5, feedRatePercent: 5, dailyFeedKg: 17, accumulatedFeedKg: 255 },
       { id: 'v01-43', date: '2026-06-20', currentWeightG: 3.6, feedRatePercent: 5, dailyFeedKg: 22, accumulatedFeedKg: 367 },
