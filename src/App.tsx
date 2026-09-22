@@ -14,7 +14,7 @@ import {
   suggestFeedRatePercent,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
-import type { BiometryInput, PlannedBiometry, Pond } from './types'
+import type { BiometryInput, PlannedBiometry, Pond, ProductUsage } from './types'
 import {
   buildShareUrl,
   clearStoredSyncToken,
@@ -52,7 +52,9 @@ function loadPonds() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (!stored) return cloneReportData()
-    return (JSON.parse(stored) as Pond[]).map(enrichWithReportMetadata)
+    return (JSON.parse(stored) as Pond[])
+      .filter((pond) => pond.id !== 'v02')
+      .map(enrichWithReportMetadata)
   } catch {
     return cloneReportData()
   }
@@ -102,8 +104,9 @@ function plannedAfterLatest(pond: Pond): PlannedBiometry | null {
 }
 
 type Modal =
-  | { kind: 'pond' }
+  | { kind: 'pond'; editId?: string }
   | { kind: 'biometry'; editId?: string }
+  | { kind: 'products'; pondId?: string }
   | null
 
 type SyncStatus = 'local' | 'connecting' | 'synced' | 'syncing' | 'error'
@@ -134,6 +137,10 @@ export default function App() {
     selected && modal?.kind === 'biometry' && modal.editId
       ? selected.biometries.find((item) => item.id === modal.editId) ?? null
       : null
+  const editingPond =
+    modal?.kind === 'pond' && modal.editId
+      ? ponds.find((pond) => pond.id === modal.editId) ?? null
+      : null
 
   function cacheLocally(next: Pond[]) {
     setPonds(next)
@@ -141,7 +148,9 @@ export default function App() {
   }
 
   function applyRemote(remote: RemoteState) {
-    const next = remote.ponds.map(enrichWithReportMetadata)
+    const next = remote.ponds
+      .filter((pond) => pond.id !== 'v02')
+      .map(enrichWithReportMetadata)
     syncVersionRef.current = remote.version
     cacheLocally(next)
     setSyncUpdatedAt(remote.updatedAt)
@@ -313,6 +322,22 @@ export default function App() {
     setModal(null)
   }
 
+  async function updatePond(pond: Pond) {
+    const next = ponds.map((item) => (item.id === pond.id ? pond : item))
+    const saved = await persist(next)
+    if (saved) setModal(null)
+  }
+
+  async function saveProductUsage(pondId: string, usage: ProductUsage) {
+    const next = ponds.map((pond) =>
+      pond.id === pondId
+        ? { ...pond, productUsages: [...(pond.productUsages ?? []), usage] }
+        : pond,
+    )
+    const saved = await persist(next)
+    if (saved) setModal(null)
+  }
+
   async function saveBiometry(input: BiometryInput) {
     if (!selected) return
 
@@ -433,12 +458,16 @@ export default function App() {
             pond={selected}
             onAddBiometry={() => setModal({ kind: 'biometry' })}
             onEditBiometry={(id) => setModal({ kind: 'biometry', editId: id })}
+            onEditPond={() => setModal({ kind: 'pond', editId: selected.id })}
+            onProducts={() => setModal({ kind: 'products', pondId: selected.id })}
           />
         ) : (
           <Dashboard
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
+            onEditPond={(id) => setModal({ kind: 'pond', editId: id })}
+            onProducts={() => setModal({ kind: 'products' })}
             syncToken={syncToken}
             syncStatus={syncStatus}
             syncMessage={syncMessage}
@@ -455,7 +484,21 @@ export default function App() {
         <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
       </button>
 
-      {modal?.kind === 'pond' && <PondForm onClose={() => setModal(null)} onSave={addPond} />}
+      {modal?.kind === 'pond' && (
+        <PondForm
+          initial={editingPond ?? undefined}
+          onClose={() => setModal(null)}
+          onSave={editingPond ? updatePond : addPond}
+        />
+      )}
+      {modal?.kind === 'products' && (
+        <ProductUsageForm
+          ponds={ponds}
+          initialPondId={modal.pondId}
+          onClose={() => setModal(null)}
+          onSave={saveProductUsage}
+        />
+      )}
       {modal?.kind === 'biometry' && selected && (
         <BiometryForm
           pond={selected}
@@ -472,6 +515,8 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
+  onEditPond,
+  onProducts,
   syncToken,
   syncStatus,
   syncMessage,
@@ -484,6 +529,8 @@ function Dashboard({
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
+  onEditPond: (id: string) => void
+  onProducts: () => void
   syncToken: string | null
   syncStatus: SyncStatus
   syncMessage: string
@@ -523,6 +570,15 @@ function Dashboard({
         onDisconnect={onDisconnectSync}
       />
 
+      <article className="product-tracker-card">
+        <div>
+          <span className="eyebrow">Aplicações</span>
+          <strong>Controle de uso de produtos</strong>
+          <p>Registre data, produto, quantidade e unidade para acompanhar o consumo por período.</p>
+        </div>
+        <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
+      </article>
+
       <div className="section-heading compact-heading">
         <div>
           <h2>Produção em andamento</h2>
@@ -533,7 +589,12 @@ function Dashboard({
 
       <div className="pond-list">
         {ponds.map((pond) => (
-          <PondCard pond={pond} key={pond.id} onOpen={() => onOpen(pond.id)} />
+          <PondCard
+            pond={pond}
+            key={pond.id}
+            onOpen={() => onOpen(pond.id)}
+            onEdit={() => onEditPond(pond.id)}
+          />
         ))}
       </div>
 
@@ -615,7 +676,15 @@ function SyncPanel({
   )
 }
 
-function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
+function PondCard({
+  pond,
+  onOpen,
+  onEdit,
+}: {
+  pond: Pond
+  onOpen: () => void
+  onEdit: () => void
+}) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
   const cultivationDays = cultivationDaysAtReference(pond)
@@ -624,7 +693,8 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
 
   return (
-    <button className="pond-card" onClick={onOpen}>
+    <button className="pond-card actionable" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
+      <span className="pond-card-open-hint">Toque para abrir o viveiro</span>
       <div className="pond-card-head">
         <div>
           <span className="pond-name">{pond.name}</span>
@@ -668,11 +738,24 @@ function PondCard({ pond, onOpen }: { pond: Pond; onOpen: () => void }) {
         </div>
       )}
 
+      <article className="product-tracker-inline">
+        <div>
+          <span className="eyebrow">Aplicações</span>
+          <strong>Uso de produtos</strong>
+          <p>{(pond.productUsages ?? []).length} registros cadastrados.</p>
+        </div>
+        <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
+      </article>
+
       {nextPlanned && (
         <div className="planned-inline">
           Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
         </div>
       )}
+      <div className="pond-card-action">
+        <span>Ver detalhes, histórico e biometria</span>
+        <strong>ABRIR →</strong>
+      </div>
     </button>
   )
 }
@@ -681,10 +764,14 @@ function PondDetail({
   pond,
   onAddBiometry,
   onEditBiometry,
+  onEditPond,
+  onProducts,
 }: {
   pond: Pond
   onAddBiometry: () => void
   onEditBiometry: (id: string) => void
+  onEditPond: () => void
+  onProducts: () => void
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
@@ -715,6 +802,7 @@ function PondDetail({
           <h2>Dados do viveiro</h2>
           <p>Informações de cadastro e do lote.</p>
         </div>
+        <button className="text-button" onClick={onEditPond}>Editar dados</button>
       </div>
 
       <div className="facts-grid">
@@ -985,23 +1073,36 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-function PondForm({ onClose, onSave }: { onClose: () => void; onSave: (pond: Pond) => void }) {
+function PondForm({
+  initial,
+  onClose,
+  onSave,
+}: {
+  initial?: Pond
+  onClose: () => void
+  onSave: (pond: Pond) => void
+}) {
   const [form, setForm] = useState({
-    name: '',
-    areaHa: '',
-    initialPopulation: '',
-    laboratory: '',
-    stockingDate: '',
-    cycleStartDate: '',
-    cycle: '1',
-    feeder: '',
-    plPerGram: '',
+    name: initial?.name ?? '',
+    areaHa: initial ? String(initial.areaHa) : '',
+    initialPopulation: initial ? String(initial.initialPopulation) : '',
+    laboratory: initial?.laboratory ?? '',
+    stockingDate: initial?.stockingDate ?? '',
+    cycleStartDate: initial?.cycleStartDate ?? '',
+    cycle: initial ? String(initial.cycle) : '1',
+    feeder: initial?.feeder ?? '',
+    plPerGram: initial?.plPerGram != null ? String(initial.plPerGram) : '',
   })
 
   function submit(event: FormEvent) {
     event.preventDefault()
     onSave({
-      id: id('pond'),
+      ...(initial ?? {
+        id: id('pond'),
+        reportReferenceDate: null,
+        plannedBiometries: [],
+        biometries: [],
+      }),
       name: form.name.trim(),
       areaHa: Number(form.areaHa),
       initialPopulation: Number(form.initialPopulation),
@@ -1011,15 +1112,23 @@ function PondForm({ onClose, onSave }: { onClose: () => void; onSave: (pond: Pon
       cycle: Number(form.cycle),
       feeder: form.feeder.trim(),
       plPerGram: form.plPerGram ? Number(form.plPerGram) : null,
-      reportReferenceDate: null,
-      plannedBiometries: [],
-      biometries: [],
+      productUsages: initial?.productUsages ?? [],
     })
   }
 
   return (
-    <ModalShell title="Novo viveiro" subtitle="Cadastre os dados palpáveis do lote." onClose={onClose}>
+    <ModalShell
+      title={initial ? 'Editar dados do viveiro' : 'Novo viveiro'}
+      subtitle={initial ? 'Dados iniciais e população do lote.' : 'Cadastre os dados palpáveis do lote.'}
+      onClose={onClose}
+    >
       <form onSubmit={submit} className="form-grid">
+        {initial && (
+          <div className="correction-note">
+            <strong>Dados iniciais editáveis</strong>
+            <span>Você pode corrigir área, população inicial, povoamento, ciclo e os demais dados cadastrados. Os indicadores serão recalculados a partir dos novos valores.</span>
+          </div>
+        )}
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Área (ha)" required><input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.areaHa} onChange={(e) => setForm({ ...form, areaHa: e.target.value })} /></Field>
@@ -1035,8 +1144,160 @@ function PondForm({ onClose, onSave }: { onClose: () => void; onSave: (pond: Pon
           <Field label="PL/g"><input type="number" min="0" inputMode="numeric" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
         <Field label="Raçoador"><input value={form.feeder} onChange={(e) => setForm({ ...form, feeder: e.target.value })} /></Field>
-        <button className="primary-button" type="submit">Criar viveiro</button>
+        <button className="primary-button" type="submit">{initial ? 'Salvar dados' : 'Criar viveiro'}</button>
       </form>
+    </ModalShell>
+  )
+}
+
+function ProductUsageForm({
+  ponds,
+  initialPondId,
+  onClose,
+  onSave,
+}: {
+  ponds: Pond[]
+  initialPondId?: string
+  onClose: () => void
+  onSave: (pondId: string, usage: ProductUsage) => void
+}) {
+  const now = new Date()
+  const defaultMonth = now.toISOString().slice(0, 7)
+  const [pondId, setPondId] = useState(initialPondId ?? ponds[0]?.id ?? '')
+  const [form, setForm] = useState({
+    date: now.toISOString().slice(0, 10),
+    product: '',
+    quantity: '',
+    unit: 'mL' as ProductUsage['unit'],
+    note: '',
+    month: defaultMonth,
+  })
+  const [error, setError] = useState('')
+
+  const records = ponds
+    .flatMap((pond) =>
+      (pond.productUsages ?? []).map((usage) => ({ ...usage, pondName: pond.name })),
+    )
+    .filter((usage) => usage.date.slice(0, 7) === form.month)
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  const totals = Object.values(
+    records.reduce<Record<string, { product: string; unit: string; quantity: number }>>((acc, usage) => {
+      const key = usage.product.trim().toLowerCase() + '|' + usage.unit
+      acc[key] ??= { product: usage.product, unit: usage.unit, quantity: 0 }
+      acc[key].quantity += usage.quantity
+      return acc
+    }, {}),
+  ).sort((a, b) => a.product.localeCompare(b.product))
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    const quantity = Number(form.quantity)
+    if (!pondId) {
+      setError('Selecione o viveiro.')
+      return
+    }
+    if (!form.date || !form.product.trim() || quantity <= 0) {
+      setError('Informe data, produto e uma quantidade maior que zero.')
+      return
+    }
+    onSave(pondId, {
+      id: id('usage'),
+      date: form.date,
+      product: form.product.trim(),
+      quantity,
+      unit: form.unit,
+      note: form.note.trim() || undefined,
+    })
+    setForm({ ...form, product: '', quantity: '', note: '' })
+  }
+
+  return (
+    <ModalShell title="Uso de produtos" subtitle="Registre o que foi aplicado no viveiro." onClose={onClose}>
+      <div className="form-grid">
+        <div className="correction-note">
+          <strong>Controle por período</strong>
+          <span>Cadastre cada aplicação com a quantidade e unidade. O resumo abaixo soma apenas registros do mês escolhido, sem misturar g, kg, mL e L.</span>
+        </div>
+
+        <div className="two-cols">
+          <Field label="Viveiro" required>
+            <select value={pondId} onChange={(e) => setPondId(e.target.value)}>
+              {ponds.map((pond) => <option key={pond.id} value={pond.id}>{pond.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Data da aplicação" required>
+            <input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value, month: e.target.value.slice(0, 7) })} />
+          </Field>
+        </div>
+
+        <Field label="Produto" required>
+          <input required placeholder="Ex.: N-CONTROL, N-AQUA, TCP" value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} />
+        </Field>
+
+        <div className="two-cols">
+          <Field label="Quantidade" required>
+            <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+          </Field>
+          <Field label="Unidade" required>
+            <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as ProductUsage['unit'] })}>
+              <option value="mL">mL</option>
+              <option value="L">L</option>
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+            </select>
+          </Field>
+        </div>
+
+        <Field label="Observação">
+          <input placeholder="Opcional" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+        </Field>
+
+        {error && <div className="form-error">{error}</div>}
+        <button className="primary-button" type="submit">Cadastrar aplicação</button>
+
+        <div className="usage-period-head">
+          <div>
+            <span className="eyebrow">Consumo registrado</span>
+            <strong>Resumo do mês</strong>
+          </div>
+          <input className="month-input" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} />
+        </div>
+
+        {totals.length ? (
+          <div className="usage-totals">
+            {totals.map((total) => (
+              <div className="usage-total" key={total.product + total.unit}>
+                <div>
+                  <strong>{total.product}</strong>
+                  <span>{total.unit}</span>
+                </div>
+                <b>{formatNumber(total.quantity, 2)} {total.unit}</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-inline">
+            <strong>Nenhuma aplicação neste período.</strong>
+            <span>Cadastre a primeira acima.</span>
+          </div>
+        )}
+
+        {records.length > 0 && (
+          <div className="usage-history">
+            {records.map((usage) => (
+              <div className="usage-row" key={usage.id}>
+                <div>
+                  <strong>{usage.product}</strong>
+                  <span>{formatDate(usage.date)} · {usage.pondName}{usage.note ? ' · ' + usage.note : ''}</span>
+                </div>
+                <b>{formatNumber(usage.quantity, 2)} {usage.unit}</b>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </ModalShell>
   )
 }
