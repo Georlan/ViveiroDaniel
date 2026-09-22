@@ -1,20 +1,20 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #173333;
-  background: #eef4f3;
+  color: #e7f1ef;
+  background: #0d1516;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #173333;
-  --muted: #6d7f7d;
-  --line: #dce7e5;
-  --surface: #ffffff;
-  --surface-soft: #f6faf9;
-  --primary: #0f766e;
-  --primary-strong: #0b5f59;
-  --primary-soft: #dff3ef;
-  --blue: #2563eb;
-  --coral: #e76f51;
-  --shadow: 0 14px 40px rgba(28, 70, 66, 0.08);
+  --ink: #e7f1ef;
+  --muted: #9aadaa;
+  --line: #263638;
+  --surface: #151f20;
+  --surface-soft: #10191a;
+  --primary: #25c7b5;
+  --primary-strong: #1ba596;
+  --primary-soft: #123b38;
+  --blue: #69a7ff;
+  --coral: #ff9478;
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -59,9 +59,9 @@ input:focus-visible {
   justify-content: space-between;
   min-height: 88px;
   padding: calc(16px + env(safe-area-inset-top)) 20px 14px;
-  background: rgba(238, 244, 243, 0.9);
+  background: rgba(13, 21, 22, 0.94);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(220, 231, 229, 0.7);
+  border-bottom: 1px solid rgba(38, 54, 56, 0.9);
 }
 
 .topbar h1,
@@ -264,13 +264,13 @@ input:focus-visible {
 }
 
 .status.ready {
-  color: #11685f;
-  background: #e0f4ef;
+  color: #73e5d8;
+  background: #123b38;
 }
 
 .status.waiting {
-  color: #84651a;
-  background: #fff3cf;
+  color: #f4cf75;
+  background: #3a3118;
 }
 
 .metric-grid {
@@ -331,9 +331,9 @@ input:focus-visible {
   gap: 12px;
   margin-top: 18px;
   padding: 15px;
-  color: #4d6260;
-  background: #f9fbfa;
-  border: 1px dashed #cddbd9;
+  color: #aab9b7;
+  background: #111b1c;
+  border: 1px dashed #344749;
   border-radius: 17px;
   font-size: 0.79rem;
   line-height: 1.45;
@@ -490,7 +490,7 @@ input:focus-visible {
 }
 
 .axis-line {
-  stroke: #d8e3e1;
+  stroke: #304244;
   stroke-width: 1;
 }
 
@@ -510,7 +510,7 @@ input:focus-visible {
 }
 
 .chart-point {
-  stroke: white;
+  stroke: #10191a;
   stroke-width: 2;
 }
 
@@ -523,7 +523,7 @@ input:focus-visible {
 }
 
 .chart-label {
-  fill: #7c8d8b;
+  fill: #8ea3a0;
   font-size: 9px;
   font-weight: 700;
 }
@@ -668,7 +668,7 @@ input:focus-visible {
   max-height: 92vh;
   padding: 8px 18px calc(24px + env(safe-area-inset-bottom));
   overflow: auto;
-  background: #f8fbfa;
+  background: #10191a;
   border-radius: 26px 26px 0 0;
   box-shadow: 0 -18px 55px rgba(10, 43, 40, 0.2);
 }
@@ -677,7 +677,7 @@ input:focus-visible {
   width: 42px;
   height: 5px;
   margin: 1px auto 10px;
-  background: #c8d6d4;
+  background: #3b4e50;
   border-radius: 999px;
 }
 
@@ -711,7 +711,7 @@ input:focus-visible {
 }
 
 .field > span {
-  color: #405452;
+  color: #b9c8c6;
   font-size: 0.72rem;
   font-weight: 800;
 }
@@ -721,8 +721,8 @@ input:focus-visible {
   min-height: 48px;
   padding: 0 13px;
   color: var(--ink);
-  background: white;
-  border: 1px solid #d5e1df;
+  background: #0f1819;
+  border: 1px solid #304345;
   border-radius: 13px;
 }
 
@@ -734,8 +734,8 @@ input:focus-visible {
 
 .preview-card {
   padding: 14px;
-  background: #edf7f5;
-  border: 1px solid #d3ebe7;
+  background: #102a28;
+  border: 1px solid #20534d;
   border-radius: 18px;
 }
 
@@ -748,7 +748,7 @@ input:focus-visible {
 
 .preview-grid .metric {
   padding: 9px 7px;
-  background: white;
+  background: #172223;
 }
 
 .preview-grid .metric strong {
@@ -1918,6 +1918,210 @@ button:disabled {
   }
 
   .month-input {
+    width: 100%;
+  }
+}
+
+
+/* UX v3: dark, high-contrast mobile navigation */
+.pond-card.actionable {
+  padding: 0;
+  overflow: hidden;
+  background: #151f20;
+  border: 1px solid #2d4143;
+  box-shadow: 0 12px 30px rgba(0,0,0,.22);
+}
+
+.pond-card-main {
+  display: block;
+  width: 100%;
+  padding: 17px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.pond-card-main:active {
+  background: #192728;
+}
+
+.pond-card-open-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 11px;
+  color: #62e2d3;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.tap-dot {
+  width: 8px;
+  height: 8px;
+  background: #25c7b5;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px rgba(37,199,181,.12);
+}
+
+.pond-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 13px 0 0;
+  color: #9aadaa;
+  border-top: 1px solid #2a3c3e;
+}
+
+.pond-card-action strong {
+  color: #72eadc;
+  font-size: .82rem;
+  letter-spacing: .04em;
+}
+
+.pond-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 9px 13px;
+  background: #111a1b;
+  border-top: 1px solid #263638;
+}
+
+.pond-edit-button {
+  min-height: 38px;
+  padding: 0 11px;
+  color: #a9bab7;
+  background: transparent;
+  border: 1px solid #35494b;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: .7rem;
+  font-weight: 800;
+}
+
+.pond-edit-button:active {
+  background: #1b292a;
+}
+
+.detail-actions {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.product-summary-card,
+.product-tracker-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 13px;
+  padding: 15px;
+  color: var(--ink);
+  background: #122423;
+  border: 1px solid #20534d;
+  border-radius: 18px;
+}
+
+.product-summary-card > div,
+.product-tracker-card > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.product-summary-card strong,
+.product-tracker-card strong {
+  font-size: .84rem;
+}
+
+.product-summary-card p,
+.product-tracker-card p {
+  margin: 0;
+  color: #9aadaa;
+  font-size: .69rem;
+  line-height: 1.4;
+}
+
+.secondary-button {
+  min-height: 46px;
+  padding: 0 14px;
+  color: #bcece7;
+  background: #17312f;
+  border: 1px solid #2a625b;
+  border-radius: 13px;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.product-tracker-card {
+  margin-top: 14px;
+}
+
+.product-tracker-card .secondary-button,
+.product-summary-card .secondary-button {
+  flex: 0 0 auto;
+}
+
+.metric {
+  background: #101a1b;
+  border-color: #263b3d;
+}
+
+.metric.featured {
+  background: #12302e;
+  border-color: #20544f;
+}
+
+.info-item,
+.chart-card,
+.pond-title-card,
+.history-card,
+.empty-card,
+.summary-bar,
+.note-card,
+.source-card,
+.next-action-card,
+.report-summary-card {
+  background: #151f20;
+  border-color: #293d3f;
+}
+
+.info-strip {
+  background: #293d3f;
+  border-color: #293d3f;
+}
+
+.empty-inline,
+.storage-note,
+.planned-inline,
+.card-change-summary,
+.rate-note,
+.scheduled-highlight {
+  background: #111b1c;
+  border-color: #2b3f41;
+  color: #a7b7b5;
+}
+
+@media (max-width: 430px) {
+  .detail-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .product-summary-card,
+  .product-tracker-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-summary-card .secondary-button,
+  .product-tracker-card .secondary-button {
     width: 100%;
   }
 }
