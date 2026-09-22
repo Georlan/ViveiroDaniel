@@ -739,15 +739,6 @@ function PondCard({
         </div>
       )}
 
-      <article className="product-tracker-inline">
-        <div>
-          <span className="eyebrow">Aplicações</span>
-          <strong>Uso de produtos</strong>
-          <p>{(pond.productUsages ?? []).length} registros cadastrados.</p>
-        </div>
-        <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
-      </article>
-
       {nextPlanned && (
         <div className="planned-inline">
           Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
