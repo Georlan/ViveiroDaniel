@@ -15,6 +15,15 @@ export type PlannedBiometry = {
   cultivationDay: number
 }
 
+export type ProductUsage = {
+  id: string
+  date: string
+  product: string
+  quantity: number
+  unit: 'g' | 'kg' | 'mL' | 'L'
+  note?: string
+}
+
 export type Pond = {
   id: string
   name: string
@@ -29,6 +38,7 @@ export type Pond = {
   reportReferenceDate?: string | null
   plannedBiometries?: PlannedBiometry[]
   biometries: BiometryInput[]
+  productUsages?: ProductUsage[]
 }
 
 export type CalculatedBiometry = BiometryInput & {
