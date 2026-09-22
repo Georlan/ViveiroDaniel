@@ -12,10 +12,12 @@ import {
   round,
   suggestFeedRatePercent,
 } from './calculations'
-import { reportPonds } from '../data/reportData'
+import { HISTORICAL_V01_BIOMETRIES, reportPonds } from '../data/reportData'
 
 describe('report-backed calculations', () => {
   const v01 = reportPonds[0]
+  const v01Historical = { ...v01, biometries: HISTORICAL_V01_BIOMETRIES }
+
   it('reproduces the current V01 general information from the report', () => {
     expect(reportPonds).toHaveLength(1)
     expect(densityPerSquareMeter(v01)).toBe(30)
@@ -26,8 +28,8 @@ describe('report-backed calculations', () => {
   })
 
   it('keeps summary cultivation days separate from inclusive biometry day numbering', () => {
-    const latest = calculateHistory(v01)[5]
-    expect(cultivationDaysAtReference(v01)).toBe(74)
+    const latest = calculateHistory(v01Historical)[5]
+    expect(cultivationDaysAtReference(v01Historical)).toBe(74)
     expect(latest.cultivationDay).toBe(75)
   })
 
@@ -35,13 +37,13 @@ describe('report-backed calculations', () => {
     expect(averageWeightFromSample(303, 33)).toBeCloseTo(9.1818, 4)
     expect(accumulatedFeedFromPeriod(788, 69)).toBe(857)
 
-    const suggested = suggestFeedRatePercent(9.18, v01.biometries)
+    const suggested = suggestFeedRatePercent(9.18, HISTORICAL_V01_BIOMETRIES)
     expect(suggested).toBe(3.5)
   })
 
   it('suggests only from observed rate points and leaves the value editable in the UI', () => {
-    expect(suggestFeedRatePercent(4.9, v01.biometries)).toBe(4.5)
-    expect(suggestFeedRatePercent(0, v01.biometries)).toBeNull()
+    expect(suggestFeedRatePercent(4.9, HISTORICAL_V01_BIOMETRIES)).toBe(4.5)
+    expect(suggestFeedRatePercent(0, HISTORICAL_V01_BIOMETRIES)).toBeNull()
     expect(suggestFeedRatePercent(5, [])).toBeNull()
   })
 
@@ -125,7 +127,7 @@ describe('report-backed calculations', () => {
   })
 
   it('keeps last-change summaries consistent with displayed report values', () => {
-    const history = calculateHistory(v01)
+    const history = calculateHistory(v01Historical)
     const delta = compareBiometriesForDisplay(history[4], history[5])
 
     expect(delta).toEqual({
@@ -137,7 +139,7 @@ describe('report-backed calculations', () => {
   })
 
   it('reproduces all six populated V01 rows after display rounding', () => {
-    const history = calculateHistory(v01)
+    const history = calculateHistory(v01Historical)
 
     const expected = [
       { day: 36, growth: 3.5, avg: 0.68, survival: 65, feed100: 26, biomass: 340, fca: 0.75 },

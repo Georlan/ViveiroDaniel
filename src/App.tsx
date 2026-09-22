@@ -13,7 +13,7 @@ import {
   round,
   suggestFeedRatePercent,
 } from './domain/calculations'
-import { reportPonds } from './data/reportData'
+import { HISTORICAL_V01_BIOMETRIES, reportPonds } from './data/reportData'
 import type { BiometryInput, PlannedBiometry, Pond, ProductUsage } from './types'
 import {
   buildShareUrl,
@@ -123,6 +123,10 @@ function syncStatusLabel(status: SyncStatus) {
 export default function App() {
   const [ponds, setPonds] = useState<Pond[]>(loadPonds)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [selectedId])
   const [modal, setModal] = useState<Modal>(null)
   const [syncToken, setSyncToken] = useState<string | null>(() => getStoredSyncToken())
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(
@@ -438,19 +442,26 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <span className="eyebrow">Controle zootécnico</span>
-          <h1>{selected ? selected.name : 'Viveiros'}</h1>
-        </div>
         {selected ? (
-          <button className="icon-button" onClick={() => setSelectedId(null)} aria-label="Voltar para viveiros">
-            ←
-          </button>
+          <div className="topbar-nav">
+            <button className="back-button" onClick={() => setSelectedId(null)} aria-label="Voltar para viveiros">
+              <span className="back-arrow" aria-hidden="true">←</span>
+              <span>Voltar</span>
+            </button>
+            <div className="topbar-title-block">
+              <span className="eyebrow">Viveiro</span>
+              <h1>{selected.name}</h1>
+            </div>
+          </div>
         ) : (
-          <span className={syncToken ? 'device-badge synced' : 'device-badge'}>
-            {syncStatusLabel(syncStatus)}
-          </span>
+          <div className="topbar-brand">
+            <span className="eyebrow">Controle zootécnico</span>
+            <h1>Viveiros</h1>
+          </div>
         )}
+        <span className={syncToken ? 'device-badge synced' : 'device-badge'}>
+          {syncStatusLabel(syncStatus)}
+        </span>
       </header>
 
       <main>
@@ -696,11 +707,6 @@ function PondCard({
   return (
     <article className="pond-card actionable">
       <button className="pond-card-main" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
-        <div className="pond-card-open-hint">
-          <span className="tap-dot" aria-hidden="true" />
-          Toque aqui para abrir
-        </div>
-
         <div className="pond-card-head">
           <div>
             <span className="pond-name">{pond.name}</span>
@@ -750,9 +756,9 @@ function PondCard({
           </div>
         )}
 
-        <div className="pond-card-action">
-          <span>Detalhes · histórico · biometria</span>
-          <strong>ABRIR V01 →</strong>
+        <div className="pond-card-cta">
+          <span>Abrir {pond.name}</span>
+          <span className="cta-arrow" aria-hidden="true">→</span>
         </div>
       </button>
 
@@ -784,70 +790,40 @@ function PondDetail({
 
   return (
     <section className="page detail-page">
-      <div className="report-summary-card">
-        <div>
-          <span className="eyebrow">Situação no relatório</span>
-          <h2>{pond.reportReferenceDate ? formatDate(pond.reportReferenceDate) : 'Dados do viveiro'}</h2>
-          <p>
-            {cultivationDays === null
-              ? 'Sem data de referência cadastrada.'
-              : cultivationDays + ' dias de cultivo · ' + cycleDays + ' dias de ciclo'}
-          </p>
-        </div>
-        <div className="summary-orb">
-          <strong>{formatNumber(round(densityPerSquareMeter(pond), 1), 1)}</strong>
-          <span>animais/m²</span>
-        </div>
-      </div>
-
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Dados do viveiro</h2>
-          <p>Informações de cadastro e do lote.</p>
-        </div>
-        <button className="text-button" onClick={onEditPond}>Editar dados</button>
-      </div>
-
-      <div className="detail-actions">
-        <button className="primary-button" onClick={onProducts}>
-          + Registrar uso de produto
-        </button>
-        <button className="secondary-button" onClick={onEditPond}>
-          Editar dados do V01
-        </button>
-      </div>
-
-      <div className="product-summary-card">
-        <div>
-          <span className="eyebrow">Controle de insumos</span>
-          <strong>Uso de produtos</strong>
-          <p>{(pond.productUsages ?? []).length} aplicações registradas. Cadastre cada uso para acompanhar o consumo por mês.</p>
-        </div>
-        <button className="secondary-button" onClick={onProducts}>Ver histórico</button>
-      </div>
-
-      <div className="facts-grid">
-        <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
-        <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
-        <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
-        <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
-        <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
-        <Fact label="Ciclo" value={String(pond.cycle)} />
-        <Fact label="Laboratório" value={pond.laboratory || '—'} />
-        <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
-        <Fact label="Raçoador" value={pond.feeder || '—'} />
-      </div>
-
-      {nextPlanned && (
-        <div className="next-action-card">
+      <div className="pond-header-card">
+        <div className="pond-header-top">
           <div>
-            <span className="eyebrow">Planejamento do relatório</span>
-            <strong>{latest ? 'Biometria seguinte prevista' : 'Primeira biometria prevista'}</strong>
-            <p>{formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}</p>
+            <span className="eyebrow">Viveiro em produção</span>
+            <h2>{pond.name}</h2>
           </div>
-          <button className="secondary-button" onClick={onAddBiometry}>Registrar</button>
+          <span className={latest ? 'status ready' : 'status waiting'}>
+            {latest ? 'Com biometria' : 'Sem biometria'}
+          </span>
         </div>
-      )}
+        <p className="pond-header-meta">
+          {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory || '—'}
+        </p>
+        <div className="pond-header-badges">
+          {cultivationDays !== null && (
+            <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
+          )}
+          <span className="info-chip highlight">{formatNumber(round(densityPerSquareMeter(pond), 1), 1)} animais/m²</span>
+        </div>
+      </div>
+
+      <div className="operational-actions">
+        <button className="primary-button operational-primary" onClick={onAddBiometry}>
+          <span className="button-icon">＋</span> Registrar biometria
+        </button>
+        <div className="operational-secondary-grid">
+          <button className="secondary-button" onClick={onProducts}>
+            <span className="button-icon">＋</span> Registrar uso de produto
+          </button>
+          <button className="secondary-button" onClick={onEditPond}>
+            <span className="button-icon">✎</span> Editar dados
+          </button>
+        </div>
+      </div>
 
       {latest ? (
         <>
@@ -894,12 +870,6 @@ function PondDetail({
             />
             <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
-          {latest.sampleTotalWeightG && latest.sampleCount && (
-            <div className="rate-note">
-              Taxa usada no cálculo: <strong>{formatNumber(latest.feedRatePercent, 1)}%</strong>.
-              Ela pode ter sido sugerida pelo histórico e confirmada no cadastro.
-            </div>
-          )}
 
           <ChangeSummary pond={pond} />
         </>
@@ -908,9 +878,7 @@ function PondDetail({
           <div className="empty-icon">≈</div>
           <h2>Aguardando a primeira biometria</h2>
           <p>
-            {pond.reportReferenceDate
-              ? 'O relatório traz os dados gerais deste viveiro, mas ainda não registra biometria realizada. '
-              : 'O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada. '}
+            O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada.
             Não mostramos peso, biomassa, sobrevivência ou FCA até existir medição real.
           </p>
           {nextPlanned && (
@@ -921,6 +889,37 @@ function PondDetail({
           <button className="primary-button" onClick={onAddBiometry}>Registrar biometria realizada</button>
         </div>
       )}
+
+      <div className="product-summary-card">
+        <div>
+          <span className="eyebrow">Controle de insumos</span>
+          <strong>Uso de produtos</strong>
+          <p>{(pond.productUsages ?? []).length} aplicações registradas. Cadastre cada uso para acompanhar o consumo por mês.</p>
+        </div>
+        <button className="secondary-button" onClick={onProducts}>Ver histórico / Cadastrar</button>
+      </div>
+
+      <div className="section-heading compact-heading">
+        <div>
+          <h2>Dados do viveiro</h2>
+          <p>Informações de cadastro e do lote.</p>
+        </div>
+        <button className="text-button" onClick={onEditPond}>Editar</button>
+      </div>
+
+      <div className="facts-grid">
+        <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
+        <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
+        <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
+        <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
+        <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
+        <Fact label="Ciclo" value={String(pond.cycle)} />
+        <Fact label="Laboratório" value={pond.laboratory || '—'} />
+        <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
+        <Fact label="Raçoador" value={pond.feeder || '—'} />
+      </div>
+
+
 
       <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
       <PlanningSection pond={pond} />
@@ -1164,8 +1163,10 @@ function PondForm({
           <Field label="Ciclo" required><input required type="number" min="1" inputMode="numeric" value={form.cycle} onChange={(e) => setForm({ ...form, cycle: e.target.value })} /></Field>
           <Field label="PL/g"><input type="number" min="0" inputMode="numeric" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
-        <Field label="Raçoador"><input value={form.feeder} onChange={(e) => setForm({ ...form, feeder: e.target.value })} /></Field>
-        <button className="primary-button" type="submit">{initial ? 'Salvar dados' : 'Criar viveiro'}</button>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="submit">{initial ? 'Salvar dados' : 'Criar viveiro'}</button>
+        </div>
       </form>
     </ModalShell>
   )
@@ -1280,7 +1281,10 @@ function ProductUsageForm({
         </Field>
 
         {error && <div className="form-error">{error}</div>}
-        <button className="primary-button" type="submit">Cadastrar aplicação</button>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="submit">Cadastrar aplicação</button>
+        </div>
 
         <div className="usage-period-head">
           <div>
@@ -1410,7 +1414,9 @@ function SimpleBiometryForm({
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
-  const suggestedRate = suggestFeedRatePercent(currentWeightG, reportPonds[0]?.biometries ?? [])
+  const referenceRates =
+    pond.biometries.length > 0 ? pond.biometries : HISTORICAL_V01_BIOMETRIES
+  const suggestedRate = suggestFeedRatePercent(currentWeightG, referenceRates)
   const effectiveRate = form.feedRatePercent
     ? Number(form.feedRatePercent)
     : suggestedRate ?? 0
@@ -1680,9 +1686,12 @@ function SimpleBiometryForm({
           </div>
         )}
 
-        <button className="primary-button" type="submit">
-          {initial ? 'Salvar correção' : 'Salvar biometria'}
-        </button>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="submit">
+            {initial ? 'Salvar correção' : 'Salvar biometria'}
+          </button>
+        </div>
       </form>
     </ModalShell>
   )
@@ -1859,7 +1868,10 @@ function LegacyBiometryEditForm({
           </div>
         )}
 
-        <button className="primary-button" type="submit">Salvar correção</button>
+        <div className="modal-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="submit">Salvar correção</button>
+        </div>
       </form>
     </ModalShell>
   )
