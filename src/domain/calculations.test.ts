@@ -16,22 +16,13 @@ import { reportPonds } from '../data/reportData'
 
 describe('report-backed calculations', () => {
   const v01 = reportPonds[0]
-  const v02 = reportPonds[1]
-
-  it('reproduces V01 and V02 general information from the report', () => {
+  it('reproduces the current V01 general information from the report', () => {
+    expect(reportPonds).toHaveLength(1)
     expect(densityPerSquareMeter(v01)).toBe(30)
     expect(preparationDays(v01)).toBe(30)
     expect(cultivationDaysAtReference(v01)).toBe(74)
     expect(cycleDaysAtReference(v01)).toBe(104)
-
-    expect(densityPerSquareMeter(v02)).toBe(16)
-    expect(preparationDays(v02)).toBe(5)
-    expect(cultivationDaysAtReference(v02)).toBe(16)
-    expect(cycleDaysAtReference(v02)).toBe(21)
-    expect(v02.plannedBiometries?.[0]).toEqual({
-      cultivationDay: 31,
-      date: '2026-08-05',
-    })
+    expect(v01.initialPopulation).toBe(150000)
   })
 
   it('keeps summary cultivation days separate from inclusive biometry day numbering', () => {
