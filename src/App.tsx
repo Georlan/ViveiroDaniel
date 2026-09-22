@@ -694,61 +694,72 @@ function PondCard({
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
 
   return (
-    <button className="pond-card actionable" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
-      <span className="pond-card-open-hint">Toque para abrir o viveiro</span>
-      <div className="pond-card-head">
-        <div>
-          <span className="pond-name">{pond.name}</span>
-          <span className="pond-meta">
-            {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory}
+    <article className="pond-card actionable">
+      <button className="pond-card-main" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
+        <div className="pond-card-open-hint">
+          <span className="tap-dot" aria-hidden="true" />
+          Toque aqui para abrir
+        </div>
+
+        <div className="pond-card-head">
+          <div>
+            <span className="pond-name">{pond.name}</span>
+            <span className="pond-meta">
+              {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory}
+            </span>
+          </div>
+          <span className={latest ? 'status ready' : 'status waiting'}>
+            {latest ? 'Com biometria' : 'Sem biometria'}
           </span>
         </div>
-        <span className={latest ? 'status ready' : 'status waiting'}>
-          {latest ? 'Com biometria' : 'Sem biometria'}
-        </span>
-      </div>
 
-      {pond.reportReferenceDate && (
-        <div className="report-context">
-          <span>Relatório {formatDate(pond.reportReferenceDate)}</span>
-          <strong>{cultivationDays === null ? '—' : cultivationDays + ' dias de cultivo'}</strong>
-        </div>
-      )}
+        {pond.reportReferenceDate && (
+          <div className="report-context">
+            <span>Relatório {formatDate(pond.reportReferenceDate)}</span>
+            <strong>{cultivationDays === null ? '—' : cultivationDays + ' dias de cultivo'}</strong>
+          </div>
+        )}
 
-      {latest ? (
-        <>
-          <div className="latest-label">
-            Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
-          </div>
-          <div className="metric-grid compact">
-            <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
-            <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} />
-            <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
-            <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
-          </div>
-          {lastChange && (
-            <div className="card-change-summary">
-              Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g · biomassa {formatSigned(lastChange.biomassKg)} kg
+        {latest ? (
+          <>
+            <div className="latest-label">
+              Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
             </div>
-          )}
-        </>
-      ) : (
-        <div className="empty-inline">
-          <strong>Ainda não há biometria realizada.</strong>
-          <span>Os indicadores zootécnicos só aparecem depois de uma medição real.</span>
-        </div>
-      )}
+            <div className="metric-grid compact">
+              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
+              <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} />
+              <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
+              <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
+            </div>
+            {lastChange && (
+              <div className="card-change-summary">
+                Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g · biomassa {formatSigned(lastChange.biomassKg)} kg
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="empty-inline">
+            <strong>Ainda não há biometria realizada.</strong>
+            <span>Os indicadores zootécnicos só aparecem depois de uma medição real.</span>
+          </div>
+        )}
 
-      {nextPlanned && (
-        <div className="planned-inline">
-          Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
+        {nextPlanned && (
+          <div className="planned-inline">
+            Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
+          </div>
+        )}
+
+        <div className="pond-card-action">
+          <span>Detalhes · histórico · biometria</span>
+          <strong>ABRIR V01 →</strong>
         </div>
-      )}
-      <div className="pond-card-action">
-        <span>Ver detalhes, histórico e biometria</span>
-        <strong>ABRIR →</strong>
+      </button>
+
+      <div className="pond-card-footer">
+        <button className="pond-edit-button" onClick={onEdit}>Editar dados iniciais</button>
       </div>
-    </button>
+    </article>
   )
 }
 
@@ -795,6 +806,24 @@ function PondDetail({
           <p>Informações de cadastro e do lote.</p>
         </div>
         <button className="text-button" onClick={onEditPond}>Editar dados</button>
+      </div>
+
+      <div className="detail-actions">
+        <button className="primary-button" onClick={onProducts}>
+          + Registrar uso de produto
+        </button>
+        <button className="secondary-button" onClick={onEditPond}>
+          Editar dados do V01
+        </button>
+      </div>
+
+      <div className="product-summary-card">
+        <div>
+          <span className="eyebrow">Controle de insumos</span>
+          <strong>Uso de produtos</strong>
+          <p>{(pond.productUsages ?? []).length} aplicações registradas. Cadastre cada uso para acompanhar o consumo por mês.</p>
+        </div>
+        <button className="secondary-button" onClick={onProducts}>Ver histórico</button>
       </div>
 
       <div className="facts-grid">
