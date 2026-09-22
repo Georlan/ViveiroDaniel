@@ -28,7 +28,7 @@ import {
   type RemoteState,
 } from './sync'
 
-const STORAGE_KEY = 'viveiro-daniel:v1'
+const STORAGE_KEY = 'viveiro-daniel:v2'
 
 function cloneReportData() {
   return JSON.parse(JSON.stringify(reportPonds)) as Pond[]
