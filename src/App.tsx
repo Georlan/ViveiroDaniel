@@ -1162,10 +1162,15 @@ function ProductUsageForm({
   onSave: (pondId: string, usage: ProductUsage) => void
 }) {
   const now = new Date()
-  const defaultMonth = now.toISOString().slice(0, 7)
+  const localToday = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
+  const defaultMonth = localToday.slice(0, 7)
   const [pondId, setPondId] = useState(initialPondId ?? ponds[0]?.id ?? '')
   const [form, setForm] = useState({
-    date: now.toISOString().slice(0, 10),
+    date: localToday,
     product: '',
     quantity: '',
     unit: 'mL' as ProductUsage['unit'],
@@ -1210,7 +1215,6 @@ function ProductUsageForm({
       unit: form.unit,
       note: form.note.trim() || undefined,
     })
-    setForm({ ...form, product: '', quantity: '', note: '' })
   }
 
   return (
