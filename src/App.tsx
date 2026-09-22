@@ -45,6 +45,7 @@ function enrichWithReportMetadata(pond: Pond): Pond {
       pond.plannedBiometries && pond.plannedBiometries.length
         ? pond.plannedBiometries
         : base.plannedBiometries ?? [],
+    productUsages: pond.productUsages ?? base.productUsages ?? [],
   }
 }
 
