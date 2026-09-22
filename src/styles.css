@@ -2125,3 +2125,236 @@ button:disabled {
     width: 100%;
   }
 }
+
+
+/* UX v8: contraste legível e hierarquia operacional */
+body {
+  color: #172524;
+  background: #eef4f3;
+}
+
+.page {
+  color: #172524;
+}
+
+.pond-title-card,
+.info-item,
+.history-card,
+.empty-card,
+.summary-bar,
+.note-card,
+.source-card,
+.report-summary-card,
+.fact,
+.change-card,
+.planning-card,
+.calculation-details {
+  color: #f3f8f7;
+  background: #172223;
+  border-color: #314345;
+}
+
+.pond-title-card p,
+.info-item span,
+.fact span,
+.history-card span,
+.history-date span,
+.history-values span,
+.section-heading p,
+.change-card-head p,
+.change-footnote,
+.planning-card summary small,
+.planning-card summary > span:last-child {
+  color: #b7c5c3;
+}
+
+.pond-title-card strong,
+.info-item strong,
+.fact strong,
+.history-card strong,
+.history-values strong,
+.section-heading h2,
+.change-card h2,
+.planning-card strong {
+  color: #f5f9f8;
+}
+
+.eyebrow {
+  color: #087b70;
+}
+
+.pond-title-card .eyebrow,
+.product-summary-card .eyebrow,
+.next-action-card .eyebrow,
+.change-card .eyebrow {
+  color: #63e1d2;
+}
+
+.detail-actions .primary-button {
+  min-height: 52px;
+  font-size: .82rem;
+}
+
+.detail-actions .secondary-button {
+  min-height: 52px;
+}
+
+.next-action-card {
+  color: #f4e9bd;
+  background: #282617;
+  border-color: #625a2d;
+}
+
+.next-action-card strong,
+.next-action-card p {
+  color: #f6edca;
+}
+
+.next-action-card .eyebrow {
+  color: #e7c95e;
+}
+
+.scheduled-highlight,
+.planned-date-button {
+  color: #f1e4ae;
+  background: #282617;
+  border-color: #625a2d;
+}
+
+.planned-date-button span,
+.planned-date-button strong,
+.planned-date-button small {
+  color: #f1e4ae;
+}
+
+.change-item {
+  background: #10191a;
+  border-color: #344749;
+}
+
+.change-item small,
+.change-item > div > span {
+  color: #b7c5c3;
+}
+
+.correction-note {
+  color: #d7f5f0;
+  background: #12302e;
+  border-color: #24544f;
+}
+
+.correction-note span {
+  color: #bdd9d5;
+}
+
+.correction-note.historical {
+  color: #f3e8ba;
+  background: #302a17;
+  border-color: #625a2d;
+}
+
+.sample-result,
+.auto-preview-card {
+  color: #dff8f4;
+  background: #12302e;
+  border-color: #24544f;
+}
+
+.sample-result span,
+.sample-result small,
+.rate-note {
+  color: #b8d5d1;
+}
+
+.technical-adjustment {
+  color: #eef7f5;
+  background: #10191a;
+  border-color: #314345;
+}
+
+.field label {
+  color: #263837;
+  font-weight: 800;
+}
+
+.field input,
+.field select,
+.month-input {
+  color: #10201f;
+  background: #ffffff;
+  border-color: #aebfbc;
+}
+
+.modal-card {
+  color: #172524;
+  background: #f4f8f7;
+}
+
+.modal-card .eyebrow {
+  color: #087b70;
+}
+
+.modal-card .correction-note {
+  color: #173c38;
+  background: #dff3ef;
+  border-color: #b8ddd7;
+}
+
+.modal-card .correction-note span {
+  color: #315b57;
+}
+
+.product-summary-card,
+.product-tracker-card {
+  color: #f3f8f7;
+  background: #132a28;
+  border-color: #28625b;
+}
+
+.product-summary-card p,
+.product-tracker-card p {
+  color: #bed0cd;
+}
+
+.product-summary-card .secondary-button,
+.product-tracker-card .secondary-button {
+  color: #e7fffb;
+  background: #1d4b46;
+  border-color: #3d8179;
+}
+
+.history-edit-button {
+  color: #0b5f59;
+  background: #e2f5f1;
+  border-color: #b9ded8;
+}
+
+.floating-action {
+  box-shadow: 0 10px 26px rgba(0,0,0,.28);
+}
+
+@media (max-width: 430px) {
+  .page {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .pond-title-card,
+  .change-card {
+    border-radius: 18px;
+  }
+
+  .facts-grid,
+  .metric-grid {
+    gap: 7px;
+  }
+
+  .fact,
+  .metric {
+    padding: 12px 10px;
+  }
+
+  .section-heading {
+    margin-top: 22px;
+  }
+}
