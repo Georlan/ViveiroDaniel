@@ -1729,3 +1729,195 @@ button:disabled {
     grid-column: 1 / -1;
   }
 }
+
+
+/* UX v7: affordance de navegação e controle de produtos */
+.pond-card.actionable {
+  position: relative;
+  padding-top: 15px;
+}
+
+.pond-card-open-hint {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--primary);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pond-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.pond-card-action span {
+  color: var(--muted);
+  font-size: 0.67rem;
+}
+
+.pond-card-action strong {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.product-tracker-card,
+.product-tracker-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px;
+  background: var(--surface);
+  border: 1px solid #d5e9e5;
+  border-radius: 18px;
+  box-shadow: 0 5px 18px rgba(28, 70, 66, 0.035);
+}
+
+.product-tracker-card {
+  margin-top: 14px;
+  background: #f4fbf9;
+}
+
+.product-tracker-inline {
+  margin-top: 14px;
+}
+
+.product-tracker-card > div,
+.product-tracker-inline > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-tracker-card strong,
+.product-tracker-inline strong {
+  font-size: 0.84rem;
+}
+
+.product-tracker-card p,
+.product-tracker-inline p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.usage-period-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 5px;
+}
+
+.usage-period-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.usage-period-head strong {
+  font-size: 0.85rem;
+}
+
+.month-input,
+.field select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid #d5e1df;
+  border-radius: 13px;
+}
+
+.month-input {
+  width: auto;
+  min-height: 40px;
+  padding: 0 9px;
+  font-size: 0.72rem;
+}
+
+.usage-totals,
+.usage-history {
+  display: grid;
+  gap: 7px;
+}
+
+.usage-total,
+.usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  background: var(--surface-soft);
+  border: 1px solid #e7efee;
+  border-radius: 13px;
+}
+
+.usage-total > div,
+.usage-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usage-total strong,
+.usage-row strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-total span,
+.usage-row span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-total b,
+.usage-row b {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 0.76rem;
+}
+
+.usage-history {
+  padding-top: 3px;
+}
+
+@media (max-width: 430px) {
+  .product-tracker-card,
+  .product-tracker-inline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .product-tracker-card .secondary-button,
+  .product-tracker-inline .secondary-button {
+    width: 100%;
+  }
+
+  .usage-period-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .month-input {
+    width: 100%;
+  }
+}
