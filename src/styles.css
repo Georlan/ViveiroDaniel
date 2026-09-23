@@ -3487,3 +3487,39 @@ body {
 .preview-card .technical-warning-note {
   grid-column: 1 / -1;
 }
+
+
+/* Owner-provided feeding table */
+.feed-rate-suggestion {
+  display: grid;
+  gap: 6px;
+  padding: 13px 15px;
+  background: #102c29;
+  border: 1.5px solid #1e5b53;
+  border-radius: 14px;
+}
+
+.feed-rate-suggestion > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-rate-suggestion span {
+  color: #bcece4;
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.feed-rate-suggestion strong {
+  color: #5eead4;
+  font-size: 1.18rem;
+  font-weight: 900;
+}
+
+.feed-rate-suggestion small {
+  color: #9fc7c1;
+  font-size: .75rem;
+  line-height: 1.4;
+}
