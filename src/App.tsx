@@ -14,6 +14,11 @@ import {
   technicalMetricsStatus,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
+import {
+  aggregateProductUsages,
+  findRegisteredProduct,
+  formatProductAmount,
+} from './domain/productUsage'
 import type { BiometryInput, Pond, ProductUsage } from './types'
 import {
   buildShareUrl,
@@ -81,6 +86,12 @@ function formatNumber(value: number, decimals = 0) {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value)
+}
+
+function formatProductUsageAmount(baseQuantity: number, dimension: 'mass' | 'volume') {
+  const amount = formatProductAmount(baseQuantity, dimension)
+  const decimals = Number.isInteger(amount.value) ? 0 : 2
+  return formatNumber(amount.value, decimals) + ' ' + amount.unit
 }
 
 function formatSigned(value: number, decimals = 0) {
@@ -788,6 +799,10 @@ function PondDetail({
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
   const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
+  const productCatalog = aggregateProductUsages(
+    pond.productUsages ?? [],
+    localToday().slice(0, 7),
+  )
 
   return (
     <section className="page detail-page">
@@ -910,10 +925,14 @@ function PondDetail({
       <div className="product-summary-card">
         <div>
           <span className="eyebrow">Controle de insumos</span>
-          <strong>Uso de produtos</strong>
-          <p>{(pond.productUsages ?? []).length} aplicações registradas. Cadastre cada uso para acompanhar o consumo por mês.</p>
+          <strong>Produtos e consumo</strong>
+          <p>
+            {productCatalog.length} {productCatalog.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
+            {' · '}
+            {(pond.productUsages ?? []).length} usos acumulados.
+          </p>
         </div>
-        <button className="secondary-button" onClick={onProducts}>Ver histórico / Cadastrar</button>
+        <button className="secondary-button" onClick={onProducts}>Produtos / registrar uso</button>
       </div>
 
       <div className="section-heading compact-heading">
@@ -1187,15 +1206,15 @@ function ProductUsageForm({
   onSave: (pondId: string, usage: ProductUsage) => void
 }) {
   const now = new Date()
-  const localToday = [
+  const today = [
     now.getFullYear(),
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('-')
-  const defaultMonth = localToday.slice(0, 7)
+  const defaultMonth = today.slice(0, 7)
   const [pondId, setPondId] = useState(initialPondId ?? ponds[0]?.id ?? '')
   const [form, setForm] = useState({
-    date: localToday,
+    date: today,
     product: '',
     quantity: '',
     unit: 'mL' as ProductUsage['unit'],
@@ -1204,38 +1223,42 @@ function ProductUsageForm({
   })
   const [error, setError] = useState('')
 
-  const records = ponds
-    .flatMap((pond) =>
-      (pond.productUsages ?? []).map((usage) => ({ ...usage, pondName: pond.name })),
-    )
-    .filter((usage) => usage.date.slice(0, 7) === form.month)
-    .sort((a, b) => b.date.localeCompare(a.date))
+  const selectedPond = ponds.find((pond) => pond.id === pondId)
+  const usages = selectedPond?.productUsages ?? []
+  const products = aggregateProductUsages(usages, form.month)
+  const registeredNames = [...new Set(products.map((item) => item.product))]
 
-  const totals = Object.values(
-    records.reduce<Record<string, { product: string; unit: string; quantity: number }>>((acc, usage) => {
-      const key = usage.product.trim().toLowerCase() + '|' + usage.unit
-      acc[key] ??= { product: usage.product, unit: usage.unit, quantity: 0 }
-      acc[key].quantity += usage.quantity
-      return acc
-    }, {}),
-  ).sort((a, b) => a.product.localeCompare(b.product))
+  function handleProductChange(value: string) {
+    const registered = findRegisteredProduct(usages, value)
+    setForm({
+      ...form,
+      product: value,
+      unit: registered?.unit ?? form.unit,
+    })
+    setError('')
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
     const quantity = Number(form.quantity)
+
     if (!pondId) {
       setError('Selecione o viveiro.')
       return
     }
-    if (!form.date || !form.product.trim() || quantity <= 0) {
+
+    if (!form.date || !form.product.trim() || !Number.isFinite(quantity) || quantity <= 0) {
       setError('Informe data, produto e uma quantidade maior que zero.')
       return
     }
+
+    const registered = findRegisteredProduct(usages, form.product)
+
     onSave(pondId, {
       id: id('usage'),
       date: form.date,
-      product: form.product.trim(),
+      product: registered?.product ?? form.product.trim(),
       quantity,
       unit: form.unit,
       note: form.note.trim() || undefined,
@@ -1243,34 +1266,74 @@ function ProductUsageForm({
   }
 
   return (
-    <ModalShell title="Uso de produtos" subtitle="Registre o que foi aplicado no viveiro." onClose={onClose}>
-      <div className="form-grid">
+    <ModalShell title="Produtos" subtitle="Consumo acumulado do viveiro." onClose={onClose}>
+      <form onSubmit={submit} className="form-grid">
         <div className="correction-note">
-          <strong>Controle por período</strong>
-          <span>Cadastre cada aplicação com a quantidade e unidade. O resumo abaixo soma apenas registros do mês escolhido, sem misturar g, kg, mL e L.</span>
+          <strong>O produto é cadastrado no primeiro uso</strong>
+          <span>
+            Depois disso, cada novo uso soma ao mesmo produto. A tela mostra o total consumido e o consumo do mês para ajudar a planejar a próxima compra.
+          </span>
         </div>
 
         <div className="two-cols">
           <Field label="Viveiro" required>
-            <select value={pondId} onChange={(e) => setPondId(e.target.value)}>
+            <select
+              value={pondId}
+              onChange={(e) => {
+                setPondId(e.target.value)
+                setForm({ ...form, product: '', quantity: '' })
+              }}
+            >
               {ponds.map((pond) => <option key={pond.id} value={pond.id}>{pond.name}</option>)}
             </select>
           </Field>
-          <Field label="Data da aplicação" required>
-            <input required type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value, month: e.target.value.slice(0, 7) })} />
+          <Field label="Data do uso" required>
+            <input
+              required
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value, month: e.target.value.slice(0, 7) })}
+            />
           </Field>
         </div>
 
         <Field label="Produto" required>
-          <input required placeholder="Ex.: N-CONTROL, N-AQUA, TCP" value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} />
+          <input
+            required
+            list="registered-products"
+            placeholder={registeredNames.length ? 'Digite ou escolha um produto' : 'Ex.: N-CONTROL, N-AQUA, TCP'}
+            value={form.product}
+            onChange={(e) => handleProductChange(e.target.value)}
+          />
+          <datalist id="registered-products">
+            {registeredNames.map((name) => <option key={name} value={name} />)}
+          </datalist>
+          <small>
+            {findRegisteredProduct(usages, form.product)
+              ? 'Produto já cadastrado. Este uso será somado ao total existente.'
+              : form.product.trim()
+                ? 'Novo produto: ele será cadastrado automaticamente ao salvar o primeiro uso.'
+                : 'Produtos já cadastrados aparecem como sugestão.'}
+          </small>
         </Field>
 
         <div className="two-cols">
-          <Field label="Quantidade" required>
-            <input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+          <Field label="Quantidade usada" required>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            />
           </Field>
           <Field label="Unidade" required>
-            <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as ProductUsage['unit'] })}>
+            <select
+              value={form.unit}
+              onChange={(e) => setForm({ ...form, unit: e.target.value as ProductUsage['unit'] })}
+            >
               <option value="mL">mL</option>
               <option value="L">L</option>
               <option value="g">g</option>
@@ -1280,56 +1343,69 @@ function ProductUsageForm({
         </div>
 
         <Field label="Observação">
-          <input placeholder="Opcional" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          <input
+            placeholder="Opcional"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+          />
         </Field>
 
         {error && <div className="form-error">{error}</div>}
+
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">Cadastrar aplicação</button>
+          <button className="primary-button" type="submit">Somar uso</button>
         </div>
 
-        <div className="usage-period-head">
+        <div className="usage-period-head product-catalog-head">
           <div>
-            <span className="eyebrow">Consumo registrado</span>
-            <strong>Resumo do mês</strong>
+            <span className="eyebrow">Produtos cadastrados</span>
+            <strong>Consumo acumulado</strong>
           </div>
-          <input className="month-input" type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} />
+          <input
+            className="month-input"
+            type="month"
+            value={form.month}
+            onChange={(e) => setForm({ ...form, month: e.target.value })}
+          />
         </div>
 
-        {totals.length ? (
-          <div className="usage-totals">
-            {totals.map((total) => (
-              <div className="usage-total" key={total.product + total.unit}>
-                <div>
-                  <strong>{total.product}</strong>
-                  <span>{total.unit}</span>
+        {products.length ? (
+          <div className="product-catalog">
+            {products.map((product) => (
+              <article className="product-consumption-card" key={product.key}>
+                <div className="product-consumption-head">
+                  <div>
+                    <strong>{product.product}</strong>
+                    <span>{product.uses} {product.uses === 1 ? 'uso registrado' : 'usos acumulados'}</span>
+                  </div>
+                  <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
                 </div>
-                <b>{formatNumber(total.quantity, 2)} {total.unit}</b>
-              </div>
+
+                <div className="product-consumption-metrics">
+                  <div>
+                    <span>Usado no mês</span>
+                    <strong>{formatProductUsageAmount(product.monthBase, product.dimension)}</strong>
+                  </div>
+                  <div>
+                    <span>Último uso</span>
+                    <strong>{formatDate(product.lastDate)}</strong>
+                  </div>
+                </div>
+
+                <small className="purchase-reference">
+                  O consumo do mês é a referência rápida para planejar a reposição deste produto.
+                </small>
+              </article>
             ))}
           </div>
         ) : (
           <div className="empty-inline">
-            <strong>Nenhuma aplicação neste período.</strong>
-            <span>Cadastre a primeira acima.</span>
+            <strong>Nenhum produto cadastrado ainda.</strong>
+            <span>O primeiro uso cria o produto automaticamente.</span>
           </div>
         )}
-
-        {records.length > 0 && (
-          <div className="usage-history">
-            {records.map((usage) => (
-              <div className="usage-row" key={usage.id}>
-                <div>
-                  <strong>{usage.product}</strong>
-                  <span>{formatDate(usage.date)} · {usage.pondName}{usage.note ? ' · ' + usage.note : ''}</span>
-                </div>
-                <b>{formatNumber(usage.quantity, 2)} {usage.unit}</b>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </form>
     </ModalShell>
   )
 }
