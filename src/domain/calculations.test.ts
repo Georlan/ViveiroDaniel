@@ -5,6 +5,7 @@ import {
   calculateHistory,
   compareBiometriesForDisplay,
   densityPerSquareMeter,
+  feedRateFromWeightTable,
   normalizeBiometryInputs,
   preparationDays,
   round,
@@ -69,6 +70,34 @@ describe('pond calculations', () => {
   it('does not invent a feed-rate suggestion without real cycle history', () => {
     expect(suggestFeedRatePercent(0, HISTORICAL_FORMULA_FIXTURE)).toBeNull()
     expect(suggestFeedRatePercent(5, [])).toBeNull()
+  })
+
+  it('uses the owner-provided weight table for the first biometry', () => {
+    expect(feedRateFromWeightTable(5.14)).toEqual({ weightG: 5, ratePercent: 3.6 })
+    expect(feedRateFromWeightTable(10)).toEqual({ weightG: 10, ratePercent: 2.7 })
+    expect(feedRateFromWeightTable(15.4)).toEqual({ weightG: 15, ratePercent: 2.2 })
+  })
+
+  it('does not extrapolate the owner table outside 0.2 g to 30 g', () => {
+    expect(feedRateFromWeightTable(0.1)).toBeNull()
+    expect(feedRateFromWeightTable(30.1)).toBeNull()
+  })
+
+  it('produces plausible technical metrics for the 5.14 g field example using the table', () => {
+    const rate = feedRateFromWeightTable(5.14)
+    expect(rate?.ratePercent).toBe(3.6)
+
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 5.14,
+      feedRatePercent: rate?.ratePercent ?? 0,
+      dailyFeedKg: 20,
+      accumulatedFeedKg: 99,
+    })
+
+    expect(status.isPlausible).toBe(true)
+    expect(status.biomassKg).toBeCloseTo(555.56, 1)
+    expect(status.survivalPercent).toBeCloseTo(49.13, 1)
+    expect(status.fca).toBeCloseTo(0.1782, 3)
   })
 
   it('allows a first biometry without inventing a feed rate', () => {
