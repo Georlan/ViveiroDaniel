@@ -3523,3 +3523,86 @@ body {
   font-size: .75rem;
   line-height: 1.4;
 }
+
+
+/* Cumulative product registry */
+.product-catalog-head {
+  margin-top: 18px;
+}
+
+.product-catalog {
+  display: grid;
+  gap: 10px;
+}
+
+.product-consumption-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface-raised);
+  border: 1.5px solid var(--border-card);
+  border-radius: 15px;
+}
+
+.product-consumption-head,
+.product-consumption-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-consumption-head > div,
+.product-consumption-metrics > div {
+  display: grid;
+  gap: 3px;
+}
+
+.product-consumption-head strong {
+  color: var(--text-main);
+  font-size: .98rem;
+}
+
+.product-consumption-head span,
+.product-consumption-metrics span,
+.purchase-reference {
+  color: var(--text-muted);
+  font-size: .73rem;
+}
+
+.product-consumption-head b {
+  color: var(--accent-teal);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.product-consumption-metrics {
+  align-items: stretch;
+}
+
+.product-consumption-metrics > div {
+  flex: 1 1 0;
+  padding: 10px 11px;
+  background: #101c1e;
+  border: 1px solid var(--border-card);
+  border-radius: 11px;
+}
+
+.product-consumption-metrics strong {
+  color: var(--text-main);
+  font-size: .88rem;
+}
+
+.purchase-reference {
+  line-height: 1.4;
+}
+
+@media (max-width: 430px) {
+  .product-consumption-head {
+    align-items: flex-start;
+  }
+
+  .product-consumption-metrics {
+    gap: 8px;
+  }
+}
