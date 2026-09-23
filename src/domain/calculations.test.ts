@@ -9,6 +9,7 @@ import {
   preparationDays,
   round,
   suggestFeedRatePercent,
+  technicalMetricsStatus,
 } from './calculations'
 import { reportPonds } from '../data/reportData'
 import type { BiometryInput, Pond } from '../types'
@@ -68,6 +69,45 @@ describe('pond calculations', () => {
   it('does not invent a feed-rate suggestion without real cycle history', () => {
     expect(suggestFeedRatePercent(0, HISTORICAL_FORMULA_FIXTURE)).toBeNull()
     expect(suggestFeedRatePercent(5, [])).toBeNull()
+  })
+
+  it('allows a first biometry without inventing a feed rate', () => {
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 5.14,
+      feedRatePercent: 0,
+      dailyFeedKg: 20,
+      accumulatedFeedKg: 99,
+    })
+
+    expect(status.hasFeedRate).toBe(false)
+    expect(status.isPlausible).toBe(false)
+    expect(status.maximumBiomassKg).toBeCloseTo(1130.8, 1)
+    expect(status.biomassKg).toBeNull()
+    expect(status.survivalPercent).toBeNull()
+  })
+
+  it('rejects technical results that imply more than 100% survival', () => {
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 5.14,
+      feedRatePercent: 1,
+      dailyFeedKg: 20,
+      accumulatedFeedKg: 99,
+    })
+
+    expect(status.hasFeedRate).toBe(true)
+    expect(status.isPlausible).toBe(false)
+    expect(status.maximumBiomassKg).toBeCloseTo(1130.8, 1)
+    expect(status.biomassKg).toBeCloseTo(2000, 1)
+    expect(status.survivalPercent).toBeGreaterThan(100)
+  })
+
+  it('ignores missing rates when suggesting from real cycle history', () => {
+    expect(
+      suggestFeedRatePercent(5, [
+        { currentWeightG: 4.9, feedRatePercent: 0 },
+        { currentWeightG: 5.2, feedRatePercent: 3.5 },
+      ]),
+    ).toBe(3.5)
   })
 
   it('recalculates later accumulated feed when an older simple biometry is corrected', () => {
