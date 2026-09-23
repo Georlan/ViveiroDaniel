@@ -3434,3 +3434,56 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* Biometry integrity: keep optional technical data clear and practical */
+.technical-pending-note,
+.technical-warning-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  font-size: .7rem;
+  line-height: 1.45;
+}
+
+.technical-pending-note {
+  color: #d9f7f2;
+  background: #12302e;
+  border: 1px solid #285f58;
+}
+
+.technical-warning-note {
+  color: #ffe1de;
+  background: #3a1717;
+  border: 1px solid #7a3333;
+}
+
+.technical-pending-note strong,
+.technical-warning-note strong {
+  font-size: .74rem;
+}
+
+.technical-pending-note span {
+  color: #bddbd6;
+}
+
+.technical-warning-note span {
+  color: #f3c2bd;
+}
+
+.technical-adjustment-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.technical-adjustment summary b {
+  max-width: 42%;
+  text-align: right;
+}
+
+.preview-card .technical-pending-note,
+.preview-card .technical-warning-note {
+  grid-column: 1 / -1;
+}
