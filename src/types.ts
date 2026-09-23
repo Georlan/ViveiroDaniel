@@ -25,6 +25,7 @@ export type ProductUsage = {
 }
 
 export type Pond = {
+  dataVersion?: number
   id: string
   name: string
   areaHa: number
