@@ -47,9 +47,10 @@ export function suggestFeedRatePercent(
   currentWeightG: number,
   reference: Array<Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent'>>,
 ) {
-  if (currentWeightG <= 0 || reference.length === 0) return null
+  const usableReference = reference.filter((item) => item.feedRatePercent > 0)
+  if (currentWeightG <= 0 || usableReference.length === 0) return null
 
-  return reference.reduce((nearest, item) => {
+  return usableReference.reduce((nearest, item) => {
     const nearestDistance = Math.abs(nearest.currentWeightG - currentWeightG)
     const itemDistance = Math.abs(item.currentWeightG - currentWeightG)
     return itemDistance < nearestDistance ? item : nearest
@@ -87,6 +88,53 @@ export function normalizeBiometryInputs(biometries: BiometryInput[]) {
   })
 }
 
+export function theoreticalBiomassAt100Kg(
+  pond: Pick<Pond, 'initialPopulation'>,
+  currentWeightG: number,
+) {
+  if (pond.initialPopulation <= 0 || currentWeightG <= 0) return 0
+  return (pond.initialPopulation * currentWeightG) / 1000
+}
+
+export function technicalMetricsStatus(
+  pond: Pick<Pond, 'initialPopulation'>,
+  input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'>,
+) {
+  const maximumBiomassKg = theoreticalBiomassAt100Kg(pond, input.currentWeightG)
+
+  if (input.feedRatePercent <= 0) {
+    return {
+      hasFeedRate: false,
+      isPlausible: false,
+      maximumBiomassKg,
+      biomassKg: null,
+      survivalPercent: null,
+      feedFor100Kg: null,
+      fca: null,
+    }
+  }
+
+  const feedRate = input.feedRatePercent / 100
+  const feedFor100Kg = maximumBiomassKg * feedRate
+  const biomassKg = input.dailyFeedKg / feedRate
+  const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
+  const fca = biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : 0
+  const tolerance = 0.000001
+  const isPlausible =
+    biomassKg <= maximumBiomassKg + tolerance &&
+    survivalPercent <= 100 + tolerance
+
+  return {
+    hasFeedRate: true,
+    isPlausible,
+    maximumBiomassKg,
+    biomassKg,
+    survivalPercent,
+    feedFor100Kg,
+    fca,
+  }
+}
+
 export function calculateBiometry(
   pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
   input: BiometryInput,
@@ -95,7 +143,7 @@ export function calculateBiometry(
   const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, input.date) + 1)
   const feedRate = input.feedRatePercent / 100
 
-  const theoreticalBiomassAt100 = (pond.initialPopulation * input.currentWeightG) / 1000
+  const theoreticalBiomassAt100 = theoreticalBiomassAt100Kg(pond, input.currentWeightG)
   const feedFor100Kg = theoreticalBiomassAt100 * feedRate
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
   const biomassKg = feedRate > 0 ? input.dailyFeedKg / feedRate : 0
