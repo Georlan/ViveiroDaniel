@@ -1405,7 +1405,7 @@ function SimpleBiometryForm({
     sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
     dailyFeedKg: initial ? String(initial.dailyFeedKg) : '',
     periodFeedKg: initial?.periodFeedKg != null ? String(initial.periodFeedKg) : '',
-    feedRatePercent: initial ? String(initial.feedRatePercent) : '',
+    feedRatePercent: initial && initial.feedRatePercent > 0 ? String(initial.feedRatePercent) : '',
   })
 
   const draftPrevious = [...historyWithoutInitial]
@@ -1417,9 +1417,9 @@ function SimpleBiometryForm({
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
   const suggestedRate = suggestFeedRatePercent(currentWeightG, pond.biometries)
-  const effectiveRate = form.feedRatePercent
+  const effectiveRate = form.feedRatePercent.trim()
     ? Number(form.feedRatePercent)
-    : suggestedRate ?? 0
+    : 0
   const periodFeedKg = Number(form.periodFeedKg)
   const accumulatedFeedKg = accumulatedFeedFromPeriod(
     draftPrevious?.accumulatedFeedKg ?? 0,
@@ -1427,7 +1427,7 @@ function SimpleBiometryForm({
   )
 
   const parsed: BiometryInput | null =
-    form.date && currentWeightG > 0 && effectiveRate > 0 && Number(form.dailyFeedKg) >= 0
+    form.date && currentWeightG > 0 && Number(form.dailyFeedKg) >= 0
       ? {
           ...(initial ?? {}),
           id: initial?.id ?? 'preview',
@@ -1445,6 +1445,7 @@ function SimpleBiometryForm({
   const preview = parsed
     ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
     : null
+  const previewTechnical = preview ? technicalMetricsStatus(pond, preview) : null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -1473,8 +1474,15 @@ function SimpleBiometryForm({
       return
     }
 
-    if (effectiveRate <= 0) {
-      setError('Informe a taxa de alimentação usada no manejo antes de salvar.')
+    if (form.feedRatePercent.trim() && (!Number.isFinite(effectiveRate) || effectiveRate <= 0)) {
+      setError('Se informar a taxa de alimentação, use um valor maior que zero.')
+      return
+    }
+
+    if (previewTechnical?.hasFeedRate && !previewTechnical.isPlausible) {
+      setError(
+        'A taxa informada gera biomassa ou sobrevivência acima do limite físico do viveiro. Remova a taxa para salvar agora ou informe a taxa correta.',
+      )
       return
     }
 
@@ -1577,7 +1585,7 @@ function SimpleBiometryForm({
           <span className="form-step-number">3</span>
           <div>
             <strong>Informe a ração</strong>
-            <small>O restante do controle será calculado pelo app.</small>
+            <small>O app calcula o que for possível com os dados realmente informados.</small>
           </div>
         </div>
         <Field label="Ração por dia agora (kg)" required>
@@ -1614,21 +1622,21 @@ function SimpleBiometryForm({
           </small>
         </Field>
 
-        <details className="technical-adjustment" open={!suggestedRate}>
+        <details className="technical-adjustment">
           <summary>
             <span>
               <strong>Taxa de alimentação</strong>
-              <small>{suggestedRate ? 'Sugestão baseada no histórico real deste ciclo' : 'Obrigatória na primeira biometria'}</small>
+              <small>Opcional — informe somente se souber a taxa real do manejo</small>
             </span>
-            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : '—'}</b>
+            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Opcional'}</b>
           </summary>
           <div className="technical-adjustment-body">
             <p>
               {suggestedRate
-                ? 'Sugestão de ' +
+                ? 'O histórico real deste ciclo sugere ' +
                   formatNumber(suggestedRate, 1) +
-                  '% baseada no peso mais próximo observado no histórico do V01. Isso é uma estimativa, não uma regra confirmada.'
-                : 'Como esta é a primeira biometria do ciclo, não existe histórico real para sugerir a taxa. Informe a taxa que está sendo usada no manejo.'}
+                  '%. Use essa sugestão somente se ela corresponder ao manejo atual.'
+                : 'Você pode salvar sem preencher. Biomassa, sobrevivência, ração p/100% e FCA ficarão aguardando uma taxa real.'}
             </p>
             <Field label="Taxa usada (%)">
               <input
@@ -1636,20 +1644,40 @@ function SimpleBiometryForm({
                 min="0.01"
                 step="0.01"
                 inputMode="decimal"
-                placeholder={suggestedRate ? formatNumber(suggestedRate, 1) : ''}
+                placeholder="Ex.: 3,5"
                 value={form.feedRatePercent}
-                onChange={(e) => setForm({ ...form, feedRatePercent: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, feedRatePercent: e.target.value })
+                  setError('')
+                }}
               />
             </Field>
-            {form.feedRatePercent && suggestedRate && (
-              <button
-                className="inline-reset-button"
-                type="button"
-                onClick={() => setForm({ ...form, feedRatePercent: '' })}
-              >
-                Usar sugestão de {formatNumber(suggestedRate, 1)}%
-              </button>
-            )}
+            <div className="technical-adjustment-actions">
+              {!form.feedRatePercent && suggestedRate && (
+                <button
+                  className="inline-reset-button"
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...form, feedRatePercent: String(suggestedRate) })
+                    setError('')
+                  }}
+                >
+                  Usar sugestão de {formatNumber(suggestedRate, 1)}%
+                </button>
+              )}
+              {form.feedRatePercent && (
+                <button
+                  className="inline-reset-button"
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...form, feedRatePercent: '' })
+                    setError('')
+                  }}
+                >
+                  Remover taxa e salvar sem indicadores técnicos
+                </button>
+              )}
+            </div>
           </div>
         </details>
 
@@ -1662,13 +1690,38 @@ function SimpleBiometryForm({
             </span>
             <div className="preview-grid">
               <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
-              <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
+              {preview.previousWeightG === null ? (
+                <Metric label="Comparação" value="Linha de base" />
+              ) : (
+                <Metric label="Ganho desde anterior" value={formatSigned(preview.growthG, 2) + ' g'} />
+              )}
               <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
-              <Metric label="Biomassa" value={formatNumber(round(preview.biomassKg)) + ' kg'} />
-              <Metric label="Sobrevivência est." value={formatNumber(round(preview.survivalPercent)) + '%'} />
-              <Metric label="Ração p/100%" value={formatNumber(round(preview.feedFor100Kg)) + ' kg'} />
-              <Metric label="FCA" value={formatNumber(round(preview.fca, 2), 2)} />
+              {previewTechnical?.isPlausible && (
+                <>
+                  <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
+                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
+                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
+                  <Metric label="FCA" value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
+                </>
+              )}
             </div>
+
+            {!previewTechnical?.hasFeedRate && (
+              <div className="technical-pending-note">
+                <strong>Você já pode salvar esta biometria.</strong>
+                <span>Biomassa, sobrevivência, ração p/100% e FCA aparecem depois que uma taxa real for informada.</span>
+              </div>
+            )}
+
+            {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
+              <div className="technical-warning-note">
+                <strong>Essa taxa não fecha com os dados informados.</strong>
+                <span>
+                  Ela resultaria em {formatNumber(round(previewTechnical.biomassKg ?? 0))} kg de biomassa e {formatNumber(round(previewTechnical.survivalPercent ?? 0))}% de sobrevivência.
+                  O máximo teórico neste peso é {formatNumber(round(previewTechnical.maximumBiomassKg))} kg. Remova a taxa para salvar agora ou informe a taxa correta.
+                </span>
+              </div>
+            )}
           </div>
         )}
 
