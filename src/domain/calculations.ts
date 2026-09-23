@@ -43,6 +43,56 @@ export function accumulatedFeedFromPeriod(previousAccumulatedKg: number, periodF
   return Math.max(0, previousAccumulatedKg) + Math.max(0, periodFeedKg)
 }
 
+export const FEED_RATE_BY_WEIGHT = [
+  { weightG: 0.2, ratePercent: 8.6 },
+  { weightG: 0.5, ratePercent: 7.6 },
+  { weightG: 1, ratePercent: 6.9 },
+  { weightG: 2, ratePercent: 5.3 },
+  { weightG: 3, ratePercent: 4.5 },
+  { weightG: 4, ratePercent: 4.1 },
+  { weightG: 5, ratePercent: 3.6 },
+  { weightG: 6, ratePercent: 3.4 },
+  { weightG: 7, ratePercent: 3.1 },
+  { weightG: 8, ratePercent: 2.9 },
+  { weightG: 9, ratePercent: 2.8 },
+  { weightG: 10, ratePercent: 2.7 },
+  { weightG: 11, ratePercent: 2.5 },
+  { weightG: 12, ratePercent: 2.4 },
+  { weightG: 13, ratePercent: 2.3 },
+  { weightG: 14, ratePercent: 2.3 },
+  { weightG: 15, ratePercent: 2.2 },
+  { weightG: 16, ratePercent: 2.1 },
+  { weightG: 17, ratePercent: 2.1 },
+  { weightG: 18, ratePercent: 2.0 },
+  { weightG: 19, ratePercent: 2.0 },
+  { weightG: 20, ratePercent: 1.9 },
+  { weightG: 21, ratePercent: 1.9 },
+  { weightG: 22, ratePercent: 1.8 },
+  { weightG: 23, ratePercent: 1.8 },
+  { weightG: 24, ratePercent: 1.8 },
+  { weightG: 25, ratePercent: 1.7 },
+  { weightG: 26, ratePercent: 1.7 },
+  { weightG: 27, ratePercent: 1.6 },
+  { weightG: 28, ratePercent: 1.6 },
+  { weightG: 29, ratePercent: 1.6 },
+  { weightG: 30, ratePercent: 1.5 },
+] as const
+
+export function feedRateFromWeightTable(currentWeightG: number) {
+  if (
+    currentWeightG < FEED_RATE_BY_WEIGHT[0].weightG ||
+    currentWeightG > FEED_RATE_BY_WEIGHT[FEED_RATE_BY_WEIGHT.length - 1].weightG
+  ) {
+    return null
+  }
+
+  return FEED_RATE_BY_WEIGHT.reduce((nearest, item) => {
+    const nearestDistance = Math.abs(nearest.weightG - currentWeightG)
+    const itemDistance = Math.abs(item.weightG - currentWeightG)
+    return itemDistance < nearestDistance ? item : nearest
+  })
+}
+
 export function suggestFeedRatePercent(
   currentWeightG: number,
   reference: Array<Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent'>>,
