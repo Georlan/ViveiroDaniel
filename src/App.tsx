@@ -5,16 +5,15 @@ import {
   calculateBiometry,
   calculateHistory,
   compareBiometriesForDisplay,
-  cultivationDaysAtReference,
-  cycleDaysAtReference,
+  daysBetween,
   densityPerSquareMeter,
   normalizeBiometryInputs,
   preparationDays,
   round,
   suggestFeedRatePercent,
 } from './domain/calculations'
-import { HISTORICAL_V01_BIOMETRIES, reportPonds } from './data/reportData'
-import type { BiometryInput, PlannedBiometry, Pond, ProductUsage } from './types'
+import { reportPonds } from './data/reportData'
+import type { BiometryInput, Pond, ProductUsage } from './types'
 import {
   buildShareUrl,
   clearStoredSyncToken,
@@ -28,36 +27,45 @@ import {
   type RemoteState,
 } from './sync'
 
-const STORAGE_KEY = 'viveiro-daniel:v2'
+const STORAGE_KEY = 'viveiro-daniel:v3'
+const LEGACY_STORAGE_KEYS = ['viveiro-daniel:v2', 'viveiro-daniel:v1']
 
 function cloneReportData() {
   return JSON.parse(JSON.stringify(reportPonds)) as Pond[]
 }
 
-function enrichWithReportMetadata(pond: Pond): Pond {
+function normalizePondState(pond: Pond): Pond {
   const base = reportPonds.find((item) => item.id === pond.id)
-  if (!base) return { ...pond, plannedBiometries: pond.plannedBiometries ?? [] }
+  const isLegacyV01 = pond.id === 'v01' && pond.dataVersion !== 2
 
   return {
     ...pond,
-    reportReferenceDate: pond.reportReferenceDate ?? base.reportReferenceDate ?? null,
-    plannedBiometries:
-      pond.plannedBiometries && pond.plannedBiometries.length
-        ? pond.plannedBiometries
-        : base.plannedBiometries ?? [],
-    productUsages: pond.productUsages ?? base.productUsages ?? [],
+    dataVersion: 2,
+    reportReferenceDate: null,
+    plannedBiometries: [],
+    biometries: isLegacyV01 ? [] : pond.biometries ?? [],
+    productUsages: pond.productUsages ?? base?.productUsages ?? [],
   }
 }
 
 function loadPonds() {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return cloneReportData()
-    return (JSON.parse(stored) as Pond[])
-      .filter((pond) => pond.id !== 'v02')
-      .map(enrichWithReportMetadata)
+    const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]
+    for (const key of keys) {
+      const stored = localStorage.getItem(key)
+      if (!stored) continue
+
+      const next = (JSON.parse(stored) as Pond[])
+        .filter((pond) => pond.id !== 'v02')
+        .map(normalizePondState)
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      return next
+    }
+
+    return cloneReportData().map(normalizePondState)
   } catch {
-    return cloneReportData()
+    return cloneReportData().map(normalizePondState)
   }
 }
 
@@ -95,13 +103,13 @@ function id(prefix: string) {
   return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)
 }
 
-function plannedAfterLatest(pond: Pond): PlannedBiometry | null {
-  const planned = pond.plannedBiometries ?? []
-  if (!planned.length) return null
-  const history = calculateHistory(pond)
-  const latest = history[history.length - 1]
-  if (!latest) return planned[0]
-  return planned.find((item) => item.date > latest.date) ?? null
+function localToday() {
+  const now = new Date()
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 type Modal =
@@ -155,7 +163,7 @@ export default function App() {
   function applyRemote(remote: RemoteState) {
     const next = remote.ponds
       .filter((pond) => pond.id !== 'v02')
-      .map(enrichWithReportMetadata)
+      .map(normalizePondState)
     syncVersionRef.current = remote.version
     cacheLocally(next)
     setSyncUpdatedAt(remote.updatedAt)
@@ -699,8 +707,7 @@ function PondCard({
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const cultivationDays = cultivationDaysAtReference(pond)
-  const nextPlanned = plannedAfterLatest(pond)
+  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, localToday()))
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
 
@@ -719,12 +726,10 @@ function PondCard({
           </span>
         </div>
 
-        {pond.reportReferenceDate && (
-          <div className="report-context">
-            <span>Relatório {formatDate(pond.reportReferenceDate)}</span>
-            <strong>{cultivationDays === null ? '—' : cultivationDays + ' dias de cultivo'}</strong>
-          </div>
-        )}
+        <div className="report-context">
+          <span>Povoado em {formatDate(pond.stockingDate)}</span>
+          <strong>{cultivationDays} dias de cultivo</strong>
+        </div>
 
         {latest ? (
           <>
@@ -745,14 +750,8 @@ function PondCard({
           </>
         ) : (
           <div className="empty-inline">
-            <strong>Ainda não há biometria realizada.</strong>
-            <span>Os indicadores zootécnicos só aparecem depois de uma medição real.</span>
-          </div>
-        )}
-
-        {nextPlanned && (
-          <div className="planned-inline">
-            Prevista no relatório de {formatDate(pond.reportReferenceDate)}: {formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}
+            <strong>Primeira biometria ainda não realizada.</strong>
+            <span>O acompanhamento zootécnico começa quando você registrar a primeira medição real.</span>
           </div>
         )}
 
@@ -784,9 +783,9 @@ function PondDetail({
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const cultivationDays = cultivationDaysAtReference(pond)
-  const cycleDays = cycleDaysAtReference(pond)
-  const nextPlanned = plannedAfterLatest(pond)
+  const today = localToday()
+  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
+  const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
 
   return (
     <section className="page detail-page">
@@ -804,9 +803,7 @@ function PondDetail({
           {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory || '—'}
         </p>
         <div className="pond-header-badges">
-          {cultivationDays !== null && (
-            <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
-          )}
+          <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
           <span className="info-chip highlight">{formatNumber(round(densityPerSquareMeter(pond), 1), 1)} animais/m²</span>
         </div>
       </div>
@@ -881,11 +878,6 @@ function PondDetail({
             O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada.
             Não mostramos peso, biomassa, sobrevivência ou FCA até existir medição real.
           </p>
-          {nextPlanned && (
-            <div className="scheduled-highlight">
-              Prevista no relatório: <strong>{formatDate(nextPlanned.date)} · dia {nextPlanned.cultivationDay}</strong>
-            </div>
-          )}
           <button className="primary-button" onClick={onAddBiometry}>Registrar biometria realizada</button>
         </div>
       )}
@@ -922,14 +914,12 @@ function PondDetail({
 
 
       <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
-      <PlanningSection pond={pond} />
-
       <details className="calculation-details">
         <summary>Como o app calcula os indicadores?</summary>
         <p>
-          Nos novos registros, você informa a amostra, a ração do dia e a ração fornecida desde a biometria anterior.
-          O app calcula peso médio, crescimento e ração acumulada antes de calcular biomassa, sobrevivência estimada,
-          ração p/100% e FCA. A taxa de alimentação é apenas sugerida pelo histórico conhecido e continua ajustável.
+          Em cada biometria, você informa a amostra, a ração do dia e a ração fornecida no período.
+          O app calcula peso médio, ração acumulada, biomassa, sobrevivência estimada, ração p/100% e FCA.
+          A taxa de alimentação é informada por você e, depois que houver histórico real deste ciclo, o app pode sugerir um valor com base nas medições anteriores.
         </p>
       </details>
     </section>
@@ -982,30 +972,6 @@ function HistorySection({
   )
 }
 
-function PlanningSection({ pond }: { pond: Pond }) {
-  const planned = pond.plannedBiometries ?? []
-  if (!planned.length) return null
-
-  return (
-    <details className="planning-card">
-      <summary>
-        <span>
-          <strong>Planejamento de biometria</strong>
-          <small>{planned.length + ' datas previstas no relatório'}</small>
-        </span>
-        <span>Ver datas</span>
-      </summary>
-      <div className="planning-list">
-        {planned.map((item) => (
-          <div key={item.date}>
-            <strong>Dia {item.cultivationDay}</strong>
-            <span>{formatDate(item.date)}</span>
-          </div>
-        ))}
-      </div>
-    </details>
-  )
-}
 
 function ChangeSummary({ pond }: { pond: Pond }) {
   const history = calculateHistory(pond)
@@ -1119,6 +1085,7 @@ function PondForm({
     onSave({
       ...(initial ?? {
         id: id('pond'),
+        dataVersion: 2,
         reportReferenceDate: null,
         plannedBiometries: [],
         biometries: [],
@@ -1132,6 +1099,9 @@ function PondForm({
       cycle: Number(form.cycle),
       feeder: form.feeder.trim(),
       plPerGram: form.plPerGram ? Number(form.plPerGram) : null,
+      dataVersion: 2,
+      reportReferenceDate: null,
+      plannedBiometries: [],
       productUsages: initial?.productUsages ?? [],
     })
   }
@@ -1383,7 +1353,6 @@ function SimpleBiometryForm({
 }) {
   const history = useMemo(() => calculateHistory(pond), [pond])
   const latest = history[history.length - 1]
-  const planned = initial ? null : plannedAfterLatest(pond)
   const historyWithoutInitial = useMemo(
     () =>
       calculateHistory({
@@ -1397,7 +1366,7 @@ function SimpleBiometryForm({
 
   const [error, setError] = useState('')
   const [form, setForm] = useState({
-    date: initial?.date ?? '',
+    date: initial?.date ?? localToday(),
     sampleTotalWeightG:
       initial?.sampleTotalWeightG != null ? String(initial.sampleTotalWeightG) : '',
     sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
@@ -1414,9 +1383,7 @@ function SimpleBiometryForm({
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
-  const referenceRates =
-    pond.biometries.length > 0 ? pond.biometries : HISTORICAL_V01_BIOMETRIES
-  const suggestedRate = suggestFeedRatePercent(currentWeightG, referenceRates)
+  const suggestedRate = suggestFeedRatePercent(currentWeightG, pond.biometries)
   const effectiveRate = form.feedRatePercent
     ? Number(form.feedRatePercent)
     : suggestedRate ?? 0
@@ -1446,12 +1413,6 @@ function SimpleBiometryForm({
     ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
     : null
 
-  function usePlannedDate() {
-    if (!planned) return
-    setForm({ ...form, date: planned.date })
-    setError('')
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
@@ -1480,7 +1441,7 @@ function SimpleBiometryForm({
     }
 
     if (effectiveRate <= 0) {
-      setError('Não foi possível sugerir a taxa de alimentação. Abra o ajuste técnico e informe a taxa.')
+      setError('Informe a taxa de alimentação usada no manejo antes de salvar.')
       return
     }
 
@@ -1513,14 +1474,6 @@ function SimpleBiometryForm({
               como crescimento, ração acumulada e FCA quando dependerem deste registro.
             </span>
           </div>
-        )}
-
-        {planned && (
-          <button type="button" className="planned-date-button" onClick={usePlannedDate}>
-            <span>Data prevista</span>
-            <strong>{formatDate(planned.date)} · dia {planned.cultivationDay}</strong>
-            <small>Usar esta data</small>
-          </button>
         )}
 
         <div className="form-step">
@@ -1628,11 +1581,11 @@ function SimpleBiometryForm({
           </small>
         </Field>
 
-        <details className="technical-adjustment">
+        <details className="technical-adjustment" open={!suggestedRate}>
           <summary>
             <span>
               <strong>Taxa de alimentação</strong>
-              <small>Estimativa técnica · toque apenas se precisar ajustar</small>
+              <small>{suggestedRate ? 'Sugestão baseada no histórico real deste ciclo' : 'Obrigatória na primeira biometria'}</small>
             </span>
             <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : '—'}</b>
           </summary>
@@ -1642,7 +1595,7 @@ function SimpleBiometryForm({
                 ? 'Sugestão de ' +
                   formatNumber(suggestedRate, 1) +
                   '% baseada no peso mais próximo observado no histórico do V01. Isso é uma estimativa, não uma regra confirmada.'
-                : 'Sem sugestão disponível para este peso.'}
+                : 'Como esta é a primeira biometria do ciclo, não existe histórico real para sugerir a taxa. Informe a taxa que está sendo usada no manejo.'}
             </p>
             <Field label="Taxa usada (%)">
               <input
