@@ -4,46 +4,69 @@ import {
   averageWeightFromSample,
   calculateHistory,
   compareBiometriesForDisplay,
-  cultivationDaysAtReference,
-  cycleDaysAtReference,
   densityPerSquareMeter,
   normalizeBiometryInputs,
   preparationDays,
   round,
   suggestFeedRatePercent,
 } from './calculations'
-import { HISTORICAL_V01_BIOMETRIES, reportPonds } from '../data/reportData'
+import { reportPonds } from '../data/reportData'
+import type { BiometryInput, Pond } from '../types'
 
-describe('report-backed calculations', () => {
+const HISTORICAL_FORMULA_FIXTURE: BiometryInput[] = [
+  { id: 'v01-36', date: '2026-06-13', currentWeightG: 3.5, feedRatePercent: 5, dailyFeedKg: 17, accumulatedFeedKg: 255 },
+  { id: 'v01-43', date: '2026-06-20', currentWeightG: 3.6, feedRatePercent: 5, dailyFeedKg: 22, accumulatedFeedKg: 367 },
+  { id: 'v01-54', date: '2026-07-01', currentWeightG: 4.9, feedRatePercent: 4.5, dailyFeedKg: 22, accumulatedFeedKg: 611 },
+  { id: 'v01-62', date: '2026-07-09', currentWeightG: 5.5, feedRatePercent: 4, dailyFeedKg: 20, accumulatedFeedKg: 731 },
+  { id: 'v01-68', date: '2026-07-15', currentWeightG: 7.1, feedRatePercent: 3.5, dailyFeedKg: 18, accumulatedFeedKg: 788 },
+  { id: 'v01-75', date: '2026-07-22', currentWeightG: 9.1, feedRatePercent: 3.5, dailyFeedKg: 15, accumulatedFeedKg: 857 },
+]
+
+const HISTORICAL_FORMULA_POND: Pond = {
+  dataVersion: 2,
+  id: 'formula-fixture',
+  name: 'Fixture',
+  areaHa: 0.5,
+  initialPopulation: 150000,
+  laboratory: 'fixture',
+  stockingDate: '2026-05-09',
+  cycleStartDate: '2026-04-09',
+  cycle: 1,
+  feeder: '',
+  plPerGram: null,
+  biometries: HISTORICAL_FORMULA_FIXTURE,
+}
+
+describe('pond calculations', () => {
   const v01 = reportPonds[0]
-  const v01Historical = { ...v01, biometries: HISTORICAL_V01_BIOMETRIES }
 
-  it('reproduces the current V01 general information from the report', () => {
+  it('starts the current V01 as a clean first-biometry setup', () => {
     expect(reportPonds).toHaveLength(1)
-    expect(densityPerSquareMeter(v01)).toBe(30)
-    expect(preparationDays(v01)).toBe(30)
-    expect(cultivationDaysAtReference(v01)).toBe(74)
-    expect(cycleDaysAtReference(v01)).toBe(104)
-    expect(v01.initialPopulation).toBe(150000)
+    expect(v01.dataVersion).toBe(2)
+    expect(v01.initialPopulation).toBe(220000)
+    expect(v01.laboratory).toBe('ACQUAVALE')
+    expect(v01.stockingDate).toBe('2026-09-04')
+    expect(v01.cycle).toBe(5)
+    expect(v01.biometries).toEqual([])
+    expect(v01.plannedBiometries).toEqual([])
+    expect(v01.reportReferenceDate).toBeNull()
   })
 
-  it('keeps summary cultivation days separate from inclusive biometry day numbering', () => {
-    const latest = calculateHistory(v01Historical)[5]
-    expect(cultivationDaysAtReference(v01Historical)).toBe(74)
-    expect(latest.cultivationDay).toBe(75)
+  it('calculates current static pond facts from the configured data', () => {
+    expect(densityPerSquareMeter(v01)).toBe(44)
+    expect(preparationDays(v01)).toBe(16)
   })
 
-  it('reconstructs the simple manual workflow from the operational example', () => {
+  it('reconstructs the simple manual workflow from a formula fixture', () => {
     expect(averageWeightFromSample(303, 33)).toBeCloseTo(9.1818, 4)
     expect(accumulatedFeedFromPeriod(788, 69)).toBe(857)
 
-    const suggested = suggestFeedRatePercent(9.18, HISTORICAL_V01_BIOMETRIES)
+    const suggested = suggestFeedRatePercent(9.18, HISTORICAL_FORMULA_FIXTURE)
     expect(suggested).toBe(3.5)
   })
 
-  it('suggests only from observed rate points and leaves the value editable in the UI', () => {
-    expect(suggestFeedRatePercent(4.9, HISTORICAL_V01_BIOMETRIES)).toBe(4.5)
-    expect(suggestFeedRatePercent(0, HISTORICAL_V01_BIOMETRIES)).toBeNull()
+  it('does not invent a feed-rate suggestion without real cycle history', () => {
+    expect(suggestFeedRatePercent(0, HISTORICAL_FORMULA_FIXTURE)).toBeNull()
     expect(suggestFeedRatePercent(5, [])).toBeNull()
   })
 
@@ -87,7 +110,7 @@ describe('report-backed calculations', () => {
     expect(chain[2].accumulatedFeedKg).toBe(948)
   })
 
-  it('keeps explicit legacy accumulated values as anchors when rebuilding the chain', () => {
+  it('keeps explicit accumulated values as anchors when rebuilding the chain', () => {
     const chain = normalizeBiometryInputs([
       {
         id: 'simple-before',
@@ -126,8 +149,8 @@ describe('report-backed calculations', () => {
     expect(chain[2].accumulatedFeedKg).toBe(340)
   })
 
-  it('keeps last-change summaries consistent with displayed report values', () => {
-    const history = calculateHistory(v01Historical)
+  it('keeps last-change summaries consistent with the historical formula fixture', () => {
+    const history = calculateHistory(HISTORICAL_FORMULA_POND)
     const delta = compareBiometriesForDisplay(history[4], history[5])
 
     expect(delta).toEqual({
@@ -138,9 +161,8 @@ describe('report-backed calculations', () => {
     })
   })
 
-  it('reproduces all six populated V01 rows after display rounding', () => {
-    const history = calculateHistory(v01Historical)
-
+  it('keeps the original formula reconstruction covered without exposing it as current data', () => {
+    const history = calculateHistory(HISTORICAL_FORMULA_POND)
     const expected = [
       { day: 36, growth: 3.5, avg: 0.68, survival: 65, feed100: 26, biomass: 340, fca: 0.75 },
       { day: 43, growth: 0.1, avg: 0.59, survival: 81, feed100: 27, biomass: 440, fca: 0.83 },
