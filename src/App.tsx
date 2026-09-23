@@ -11,6 +11,7 @@ import {
   preparationDays,
   round,
   suggestFeedRatePercent,
+  technicalMetricsStatus,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
 import type { BiometryInput, Pond, ProductUsage } from './types'
@@ -786,6 +787,7 @@ function PondDetail({
   const today = localToday()
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
   const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
+  const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
 
   return (
     <section className="page detail-page">
@@ -856,17 +858,40 @@ function PondDetail({
             {latest.sampleTotalWeightG && latest.sampleCount && (
               <Metric label="Peso médio" value={formatNumber(latest.currentWeightG, 2) + ' g'} featured />
             )}
-            <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} featured />
-            <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
-            <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
-            <Metric label="Ração p/100%" value={formatNumber(round(latest.feedFor100Kg)) + ' kg'} />
             <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
-            <Metric
-              label={latest.previousWeightG === null ? 'Crescimento (1ª bio)' : 'Ganho desde anterior'}
-              value={formatNumber(round(latest.growthG, 2), 2) + ' g'}
-            />
-            <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
+            {latest.previousWeightG === null ? (
+              <Metric label="Comparação" value="Linha de base" />
+            ) : (
+              <>
+                <Metric label="Ganho desde anterior" value={formatNumber(round(latest.growthG, 2), 2) + ' g'} />
+                <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
+              </>
+            )}
+            {latestTechnical?.isPlausible && (
+              <>
+                <Metric label="Biomassa" value={formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg'} featured />
+                <Metric label="Sobrevivência est." value={formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%'} />
+                <Metric label="FCA" value={formatNumber(round(latestTechnical.fca ?? 0, 2), 2)} />
+                <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
+              </>
+            )}
           </div>
+
+          {!latestTechnical?.hasFeedRate && (
+            <div className="technical-pending-note">
+              <strong>Indicadores técnicos aguardando taxa de alimentação</strong>
+              <span>Biomassa, sobrevivência estimada, ração p/100% e FCA ficam ocultos até você informar uma taxa real do manejo.</span>
+            </div>
+          )}
+
+          {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
+            <div className="technical-warning-note">
+              <strong>Taxa incompatível com os dados desta biometria</strong>
+              <span>
+                Essa taxa gera biomassa ou sobrevivência acima do limite físico do viveiro. Edite a biometria e corrija ou remova a taxa.
+              </span>
+            </div>
+          )}
 
           <ChangeSummary pond={pond} />
         </>
@@ -946,27 +971,30 @@ function HistorySection({
       </div>
 
       <div className="history-list">
-        {[...history].reverse().map((row) => (
-          <article className="history-card" key={row.id}>
-            <div className="history-date">
-              <strong>Dia {row.cultivationDay}</strong>
-              <span>{formatDate(row.date)}</span>
-            </div>
-            <div className="history-values">
-              <span><small>Peso</small>{formatNumber(row.currentWeightG, 1)} g</span>
-              <span><small>Biomassa</small>{formatNumber(round(row.biomassKg))} kg</span>
-              <span><small>Sobrev.</small>{formatNumber(round(row.survivalPercent))}%</span>
-              <span><small>FCA</small>{formatNumber(round(row.fca, 2), 2)}</span>
-            </div>
-            <button
-              className="history-edit-button"
-              onClick={() => onEditBiometry(row.id)}
-              aria-label={'Editar biometria do dia ' + row.cultivationDay}
-            >
-              Editar
-            </button>
-          </article>
-        ))}
+        {[...history].reverse().map((row) => {
+          const technical = technicalMetricsStatus(pond, row)
+          return (
+            <article className="history-card" key={row.id}>
+              <div className="history-date">
+                <strong>Dia {row.cultivationDay}</strong>
+                <span>{formatDate(row.date)}</span>
+              </div>
+              <div className="history-values">
+                <span><small>Peso</small>{formatNumber(row.currentWeightG, 1)} g</span>
+                <span><small>Biomassa</small>{technical.isPlausible ? formatNumber(round(technical.biomassKg ?? 0)) + ' kg' : '—'}</span>
+                <span><small>Sobrev.</small>{technical.isPlausible ? formatNumber(round(technical.survivalPercent ?? 0)) + '%' : '—'}</span>
+                <span><small>FCA</small>{technical.isPlausible ? formatNumber(round(technical.fca ?? 0, 2), 2) : '—'}</span>
+              </div>
+              <button
+                className="history-edit-button"
+                onClick={() => onEditBiometry(row.id)}
+                aria-label={'Editar biometria do dia ' + row.cultivationDay}
+              >
+                Editar
+              </button>
+            </article>
+          )
+        })}
       </div>
     </>
   )
@@ -980,6 +1008,8 @@ function ChangeSummary({ pond }: { pond: Pond }) {
   const previous = history[history.length - 2]
   const latest = history[history.length - 1]
   const delta = compareBiometriesForDisplay(previous, latest)
+  const previousTechnical = technicalMetricsStatus(pond, previous)
+  const latestTechnical = technicalMetricsStatus(pond, latest)
 
   const changes = [
     {
@@ -988,24 +1018,28 @@ function ChangeSummary({ pond }: { pond: Pond }) {
       sentence: movementWord(delta.weightG),
       arrow: movementArrow(delta.weightG),
     },
-    {
-      label: 'Biomassa estimada',
-      value: formatSigned(delta.biomassKg) + ' kg',
-      sentence: movementWord(delta.biomassKg),
-      arrow: movementArrow(delta.biomassKg),
-    },
-    {
-      label: 'Sobrevivência estimada',
-      value: formatSigned(delta.survivalPercentagePoints) + ' p.p.',
-      sentence: movementWord(delta.survivalPercentagePoints),
-      arrow: movementArrow(delta.survivalPercentagePoints),
-    },
-    {
-      label: 'FCA',
-      value: formatSigned(delta.fca, 2),
-      sentence: movementWord(delta.fca),
-      arrow: movementArrow(delta.fca),
-    },
+    ...(previousTechnical.isPlausible && latestTechnical.isPlausible
+      ? [
+          {
+            label: 'Biomassa estimada',
+            value: formatSigned(delta.biomassKg) + ' kg',
+            sentence: movementWord(delta.biomassKg),
+            arrow: movementArrow(delta.biomassKg),
+          },
+          {
+            label: 'Sobrevivência estimada',
+            value: formatSigned(delta.survivalPercentagePoints) + ' p.p.',
+            sentence: movementWord(delta.survivalPercentagePoints),
+            arrow: movementArrow(delta.survivalPercentagePoints),
+          },
+          {
+            label: 'FCA',
+            value: formatSigned(delta.fca, 2),
+            sentence: movementWord(delta.fca),
+            arrow: movementArrow(delta.fca),
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -1034,8 +1068,7 @@ function ChangeSummary({ pond }: { pond: Pond }) {
       </div>
 
       <p className="change-footnote">
-        Comparação feita com os mesmos valores arredondados exibidos na tabela do relatório.
-        O app informa apenas a direção da mudança, sem classificar como bom ou ruim.
+        A comparação usa apenas indicadores disponíveis e consistentes. Se faltar taxa válida, o app compara somente o peso.
       </p>
     </article>
   )
