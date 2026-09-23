@@ -10,7 +10,7 @@ import {
   normalizeBiometryInputs,
   preparationDays,
   round,
-  suggestFeedRatePercent,
+  feedRateFromWeightTable,
   technicalMetricsStatus,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
@@ -1416,10 +1416,10 @@ function SimpleBiometryForm({
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
-  const suggestedRate = suggestFeedRatePercent(currentWeightG, pond.biometries)
+  const tableRate = feedRateFromWeightTable(currentWeightG)
   const effectiveRate = form.feedRatePercent.trim()
     ? Number(form.feedRatePercent)
-    : 0
+    : tableRate?.ratePercent ?? 0
   const periodFeedKg = Number(form.periodFeedKg)
   const accumulatedFeedKg = accumulatedFeedFromPeriod(
     draftPrevious?.accumulatedFeedKg ?? 0,
@@ -1475,13 +1475,13 @@ function SimpleBiometryForm({
     }
 
     if (form.feedRatePercent.trim() && (!Number.isFinite(effectiveRate) || effectiveRate <= 0)) {
-      setError('Se informar a taxa de alimentação, use um valor maior que zero.')
+      setError('Se ajustar a taxa manualmente, use um valor maior que zero.')
       return
     }
 
     if (previewTechnical?.hasFeedRate && !previewTechnical.isPlausible) {
       setError(
-        'A taxa informada gera biomassa ou sobrevivência acima do limite físico do viveiro. Remova a taxa para salvar agora ou informe a taxa correta.',
+        'A taxa usada gera biomassa ou sobrevivência acima do limite físico do viveiro. Revise a ração ou ajuste a taxa manualmente.',
       )
       return
     }
@@ -1567,18 +1567,33 @@ function SimpleBiometryForm({
         </div>
 
         {currentWeightG > 0 && (
-          <div className="sample-result">
-            <span>Peso médio calculado</span>
-            <strong>{formatNumber(currentWeightG, 2)} g</strong>
-            <small>
-              {formatNumber(sampleTotalWeightG, 0)} g ÷ {formatNumber(sampleCount)} animais
-              {draftPrevious
-                ? ' · crescimento ' +
-                  formatSigned(currentWeightG - draftPrevious.currentWeightG, 2) +
-                  ' g'
-                : ''}
-            </small>
-          </div>
+          <>
+            <div className="sample-result">
+              <span>Peso médio calculado</span>
+              <strong>{formatNumber(currentWeightG, 2)} g</strong>
+              <small>
+                {formatNumber(sampleTotalWeightG, 0)} g ÷ {formatNumber(sampleCount)} animais
+                {draftPrevious
+                  ? ' · crescimento ' +
+                    formatSigned(currentWeightG - draftPrevious.currentWeightG, 2) +
+                    ' g'
+                  : ''}
+              </small>
+            </div>
+
+            {tableRate && !form.feedRatePercent && (
+              <div className="feed-rate-suggestion">
+                <div>
+                  <span>Taxa da tabela do viveiro</span>
+                  <strong>{formatNumber(tableRate.ratePercent, 1)}%</strong>
+                </div>
+                <small>
+                  Peso de referência mais próximo: {formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0)} g.
+                  Essa taxa será usada automaticamente nos cálculos.
+                </small>
+              </div>
+            )}
+          </>
         )}
 
         <div className="form-step">
@@ -1622,29 +1637,37 @@ function SimpleBiometryForm({
           </small>
         </Field>
 
-        <details className="technical-adjustment">
+        <details className="technical-adjustment" open={!tableRate}>
           <summary>
             <span>
               <strong>Taxa de alimentação</strong>
-              <small>Opcional — informe somente se souber a taxa real do manejo</small>
+              <small>
+                {tableRate
+                  ? 'Calculada pela tabela de peso → % biomassa'
+                  : 'Fora da faixa da tabela — ajuste manual opcional'}
+              </small>
             </span>
-            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Opcional'}</b>
+            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Sem taxa'}</b>
           </summary>
           <div className="technical-adjustment-body">
             <p>
-              {suggestedRate
-                ? 'O histórico real deste ciclo sugere ' +
-                  formatNumber(suggestedRate, 1) +
-                  '%. Use essa sugestão somente se ela corresponder ao manejo atual.'
-                : 'Você pode salvar sem preencher. Biomassa, sobrevivência, ração p/100% e FCA ficarão aguardando uma taxa real.'}
+              {tableRate
+                ? 'Para ' +
+                  formatNumber(currentWeightG, 2) +
+                  ' g, o app usa o ponto mais próximo da tabela: ' +
+                  formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0) +
+                  ' g → ' +
+                  formatNumber(tableRate.ratePercent, 1) +
+                  '%. Se o manejo real estiver diferente, ajuste abaixo.'
+                : 'A tabela fornecida cobre pesos de 0,2 g a 30 g. Fora dessa faixa, o app não extrapola nem inventa uma taxa.'}
             </p>
-            <Field label="Taxa usada (%)">
+            <Field label="Ajustar taxa manualmente (%)">
               <input
                 type="number"
                 min="0.01"
                 step="0.01"
                 inputMode="decimal"
-                placeholder="Ex.: 3,5"
+                placeholder={tableRate ? 'Deixe vazio para usar ' + formatNumber(tableRate.ratePercent, 1) + '%' : 'Ex.: 3,5'}
                 value={form.feedRatePercent}
                 onChange={(e) => {
                   setForm({ ...form, feedRatePercent: e.target.value })
@@ -1653,19 +1676,7 @@ function SimpleBiometryForm({
               />
             </Field>
             <div className="technical-adjustment-actions">
-              {!form.feedRatePercent && suggestedRate && (
-                <button
-                  className="inline-reset-button"
-                  type="button"
-                  onClick={() => {
-                    setForm({ ...form, feedRatePercent: String(suggestedRate) })
-                    setError('')
-                  }}
-                >
-                  Usar sugestão de {formatNumber(suggestedRate, 1)}%
-                </button>
-              )}
-              {form.feedRatePercent && (
+              {form.feedRatePercent && tableRate && (
                 <button
                   className="inline-reset-button"
                   type="button"
@@ -1674,7 +1685,19 @@ function SimpleBiometryForm({
                     setError('')
                   }}
                 >
-                  Remover taxa e salvar sem indicadores técnicos
+                  Voltar para taxa da tabela ({formatNumber(tableRate.ratePercent, 1)}%)
+                </button>
+              )}
+              {form.feedRatePercent && !tableRate && (
+                <button
+                  className="inline-reset-button"
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...form, feedRatePercent: '' })
+                    setError('')
+                  }}
+                >
+                  Remover taxa manual
                 </button>
               )}
             </div>
@@ -1718,7 +1741,7 @@ function SimpleBiometryForm({
                 <strong>Essa taxa não fecha com os dados informados.</strong>
                 <span>
                   Ela resultaria em {formatNumber(round(previewTechnical.biomassKg ?? 0))} kg de biomassa e {formatNumber(round(previewTechnical.survivalPercent ?? 0))}% de sobrevivência.
-                  O máximo teórico neste peso é {formatNumber(round(previewTechnical.maximumBiomassKg))} kg. Remova a taxa para salvar agora ou informe a taxa correta.
+                  O máximo teórico neste peso é {formatNumber(round(previewTechnical.maximumBiomassKg))} kg. Revise a ração informada ou ajuste a taxa manualmente.
                 </span>
               </div>
             )}
