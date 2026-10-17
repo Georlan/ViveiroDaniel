@@ -100,6 +100,27 @@ describe('pond calculations', () => {
     expect(status.fca).toBeCloseTo(0.1782, 3)
   })
 
+  it('distinguishes the field feed table from the different rates in the original report', () => {
+    const ratesInReport = HISTORICAL_FORMULA_FIXTURE.map((input) => input.feedRatePercent)
+    const ratesFromWeightTable = HISTORICAL_FORMULA_FIXTURE.map((input) =>
+      feedRateFromWeightTable(input.currentWeightG)?.ratePercent,
+    )
+
+    expect(ratesInReport).toEqual([5, 5, 4.5, 4, 3.5, 3.5])
+    expect(ratesFromWeightTable).toEqual([4.5, 4.1, 3.6, 3.6, 3.1, 2.8])
+
+    const actual = HISTORICAL_FORMULA_FIXTURE[1] // 3.6 g / 22 kg/dia
+    const reportStatus = technicalMetricsStatus(HISTORICAL_FORMULA_POND, actual)
+    const tableStatus = technicalMetricsStatus(HISTORICAL_FORMULA_POND, {
+      ...actual,
+      feedRatePercent: ratesFromWeightTable[1] ?? 0,
+    })
+
+    expect(reportStatus.survivalPercent).toBeCloseTo(81.48, 2)
+    expect(tableStatus.survivalPercent).toBeCloseTo(99.37, 2)
+    // A taxa da tabela nao pode ser tratada como medicao direta da sobrevivencia.
+  })
+
   it('flags the field case of 3.14 g and 32 kg/day without treating 382 kg accumulated as daily feed', () => {
     const status = technicalMetricsStatus(v01, {
       currentWeightG: 3.14,
@@ -112,6 +133,7 @@ describe('pond calculations', () => {
     expect(status.isPlausible).toBe(false)
     expect(status.maximumBiomassKg).toBeCloseTo(690.8, 5)
     expect(status.feedFor100Kg).toBeCloseTo(31.086, 5)
+    expect(32 - (status.feedFor100Kg ?? 0)).toBeCloseTo(0.914, 5)
     expect(status.biomassKg).toBeCloseTo(711.111, 2)
     expect(status.survivalPercent).toBeCloseTo(102.94, 2)
     expect(status.fca).toBeCloseTo(382 / (32 / 0.045), 4)
