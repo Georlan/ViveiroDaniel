@@ -10,27 +10,60 @@ function json(data, status = 200) {
   })
 }
 
-async function ensureSchema(db) {
-  await db
-    .prepare(
-      `CREATE TABLE IF NOT EXISTS shared_state (
-        workspace_key TEXT PRIMARY KEY,
-        payload TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        updated_at TEXT NOT NULL
-      )`,
-    )
-    .run()
+export async function ensureSchema(db) {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS shared_state (
+      workspace_key TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  ).run()
+
+  // The log is tenant/workspace scoped and stores revision snapshots, never share tokens.
+  // Triggers capture the exact committed rows transactionally (including writes from old clients).
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS shared_state_history (
+      workspace_key TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (workspace_key, version)
+    )`,
+  ).run()
+  await db.prepare(
+    `CREATE TRIGGER IF NOT EXISTS shared_state_history_insert
+    AFTER INSERT ON shared_state
+    BEGIN
+      INSERT OR IGNORE INTO shared_state_history
+        (workspace_key, version, updated_at, payload)
+      VALUES (NEW.workspace_key, NEW.version, NEW.updated_at, NEW.payload);
+    END`,
+  ).run()
+  await db.prepare(
+    `CREATE TRIGGER IF NOT EXISTS shared_state_history_update
+    AFTER UPDATE OF payload ON shared_state
+    BEGIN
+      INSERT OR IGNORE INTO shared_state_history
+        (workspace_key, version, updated_at, payload)
+      VALUES (OLD.workspace_key, OLD.version, OLD.updated_at, OLD.payload);
+      INSERT OR IGNORE INTO shared_state_history
+        (workspace_key, version, updated_at, payload)
+      VALUES (NEW.workspace_key, NEW.version, NEW.updated_at, NEW.payload);
+      DELETE FROM shared_state_history
+      WHERE workspace_key = NEW.workspace_key AND version < NEW.version - 29;
+    END`,
+  ).run()
 }
 
-function readBearer(request) {
+export function readBearer(request) {
   const value = request.headers.get('authorization') || ''
   if (!value.startsWith('Bearer ')) return null
   const token = value.slice(7).trim()
   return /^[A-Za-z0-9_-]{20,200}$/.test(token) ? token : null
 }
 
-async function workspaceKey(token) {
+export async function workspaceKey(token) {
   const bytes = new TextEncoder().encode(token)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest))
@@ -69,7 +102,7 @@ async function readState(db, key) {
   }
 }
 
-function database(context) {
+export function database(context) {
   return context.env && context.env.DB ? context.env.DB : null
 }
 
@@ -109,6 +142,8 @@ export async function onRequestPut(context) {
 
   const token = readBearer(context.request)
   if (!token) return json({ error: 'unauthorized' }, 401)
+
+  await ensureSchema(db)
 
   let body
   try {

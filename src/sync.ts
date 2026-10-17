@@ -179,3 +179,36 @@ export async function saveRemoteState(
 
   return asRemoteState(await parseJson(response))
 }
+
+export type RemoteHistory = {
+  revisions: RemoteState[]
+}
+
+export async function fetchRemoteHistory(token: string): Promise<RemoteHistory> {
+  let response: Response
+  try {
+    response = await fetch('/api/history', {
+      headers: { Authorization: 'Bearer ' + token },
+      cache: 'no-store',
+    })
+  } catch {
+    throw new SyncApiError('network', 'Não foi possível consultar o histórico agora.')
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new SyncApiError('unauthorized', 'O link compartilhado não é válido.')
+  }
+  if (response.status === 503) {
+    throw new SyncApiError('not-configured', 'O banco D1 ainda não está configurado.')
+  }
+  if (!response.ok) {
+    throw new SyncApiError('unknown', 'Não foi possível carregar o histórico de mudanças.')
+  }
+
+  const result: unknown = await parseJson(response)
+  const candidate = result as { revisions?: unknown } | null
+  if (!candidate || !Array.isArray(candidate.revisions)) {
+    throw new SyncApiError('invalid-response', 'O histórico retornou um formato inválido.')
+  }
+  return { revisions: candidate.revisions.map(asRemoteState) }
+}
