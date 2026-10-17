@@ -20,6 +20,7 @@ import {
   formatProductAmount,
 } from './domain/productUsage'
 import type { BiometryInput, Pond, ProductUsage } from './types'
+import { describeRevision } from './domain/audit'
 import {
   buildShareUrl,
   clearStoredSyncToken,
@@ -27,6 +28,7 @@ import {
   createSyncToken,
   fetchRemoteState,
   getStoredSyncToken,
+  fetchRemoteHistory,
   saveRemoteState,
   storeSyncToken,
   SyncApiError,
@@ -601,6 +603,7 @@ function Dashboard({
         onRefresh={onSyncNow}
         onDisconnect={onDisconnectSync}
       />
+      {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
 
       <article className="product-tracker-card">
         <div>
@@ -703,6 +706,82 @@ function SyncPanel({
         <button className="secondary-button" onClick={onCopy}>Copiar link</button>
         <button className="sync-text-button" onClick={onRefresh}>Atualizar</button>
         <button className="sync-text-button danger" onClick={onDisconnect}>Só neste aparelho</button>
+      </div>
+    </article>
+  )
+}
+
+function HistoryPanel({ syncToken }: { syncToken: string }) {
+  const [revisions, setRevisions] = useState<RemoteState[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function loadHistory() {
+    if (loading) return
+    setLoading(true)
+    setError('')
+    try {
+      const result = await fetchRemoteHistory(syncToken)
+      setRevisions(result.revisions)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao consultar alterações.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const entries = revisions?.slice(0, -1).map((revision, index) => ({
+    version: revision.version,
+    updatedAt: revision.updatedAt,
+    changes: describeRevision(revisions[index + 1].ponds, revision.ponds),
+  })) ?? []
+
+  return (
+    <article className="sync-card history-panel">
+      <div className="sync-card-copy">
+        <span className="eyebrow">Conferência de registros</span>
+        <strong>Histórico de alterações</strong>
+        <p>
+          Consulte o que mudou entre as versões salvas na fonte compartilhada.
+          Os registros começam após esta atualização; versões antigas não podem ser recuperadas.
+          O histórico mostra valores, não identifica qual pessoa digitou.
+        </p>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={loading}
+          onClick={() => void loadHistory()}
+        >
+          {loading ? 'Consultando…' : revisions ? 'Atualizar histórico' : 'Ver alterações salvas'}
+        </button>
+        {error && <small className="sync-message" role="alert">{error}</small>}
+        {revisions && (
+          <div className="history-revisions">
+            {entries.length === 0 && (
+              <small>Aguardando duas versões registradas para comparar as alterações.</small>
+            )}
+            {entries.map((entry) => (
+              <details key={entry.version} className="technical-adjustment">
+                <summary>
+                  <span>
+                    <strong>{new Date(entry.updatedAt).toLocaleString('pt-BR')}</strong>
+                    <small>Versão {entry.version} · {entry.changes.length} alterações</small>
+                  </span>
+                </summary>
+                <div className="technical-adjustment-body">
+                  {entry.changes.length ? entry.changes.map((change, index) => (
+                    <p key={index}>
+                      <strong>{change.pond}: </strong>{change.description}
+                    </p>
+                  )) : (
+                    <p>Sem mudanças detectadas nos campos acompanhados.</p>
+                  )}
+                </div>
+              </details>
+            ))}
+            <small>São exibidas até 20 alterações de versão recentes, sem identificar usuários.</small>
+          </div>
+        )}
       </div>
     </article>
   )
@@ -1735,7 +1814,11 @@ function SimpleBiometryForm({
             value={form.dailyFeedKg}
             onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
           />
-          <small>É a quantidade diária usada no momento da biometria.</small>
+          <small>
+            Digite somente o total de ração fornecido em um dia, em kg.
+            Não digite aqui o acumulado da semana ou do ciclo.
+            Exemplo: se são 32 kg todos os dias, informe 32.
+          </small>
         </Field>
         <Field
           label={
@@ -1755,7 +1838,9 @@ function SimpleBiometryForm({
             onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
           />
           <small>
-            O app soma este valor ao acumulado anterior e refaz a cadeia seguinte se você estiver corrigindo um registro antigo.
+            Some toda a ração fornecida desde a última biometria (ou desde o povoamento na primeira).
+            Este número é diferente da ração de um único dia.
+            O app acrescenta ao acumulado anterior e refaz a cadeia se um registro antigo for corrigido.
           </small>
         </Field>
 
