@@ -100,6 +100,32 @@ describe('pond calculations', () => {
     expect(status.fca).toBeCloseTo(0.1782, 3)
   })
 
+  it('flags the field case of 3.14 g and 32 kg/day without treating 382 kg accumulated as daily feed', () => {
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 3.14,
+      feedRatePercent: 4.5,
+      dailyFeedKg: 32,
+      accumulatedFeedKg: 382,
+    })
+
+    expect(status.hasFeedRate).toBe(true)
+    expect(status.isPlausible).toBe(false)
+    expect(status.maximumBiomassKg).toBeCloseTo(690.8, 5)
+    expect(status.feedFor100Kg).toBeCloseTo(31.086, 5)
+    expect(status.biomassKg).toBeCloseTo(711.111, 2)
+    expect(status.survivalPercent).toBeCloseTo(102.94, 2)
+    expect(status.fca).toBeCloseTo(382 / (32 / 0.045), 4)
+
+    // This only checks the arithmetic boundary. It is NOT an operational feed-rate recommendation.
+    const mathematicallyConsistent = technicalMetricsStatus(v01, {
+      currentWeightG: 3.14,
+      feedRatePercent: 4.64,
+      dailyFeedKg: 32,
+      accumulatedFeedKg: 382,
+    })
+    expect(mathematicallyConsistent.isPlausible).toBe(true)
+  })
+
   it('allows a first biometry without inventing a feed rate', () => {
     const status = technicalMetricsStatus(v01, {
       currentWeightG: 5.14,
