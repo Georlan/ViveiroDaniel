@@ -138,26 +138,16 @@ export function normalizeBiometryInputs(biometries: BiometryInput[]) {
   })
 }
 
-export function stockedPopulation(pond: Pick<Pond, 'initialPopulation' | 'bonusStockedPercent'>) {
-  const base = pond.initialPopulation
-  const bonus = pond.bonusStockedPercent ?? 0
-  if (!Number.isFinite(base) || base <= 0) return 0
-  // Bônus opcional: nunca presumir que uma bonificação comercial foi povoada.
-  if (!Number.isFinite(bonus) || bonus < 0 || bonus > 100) return base
-  return base + Math.round(base * bonus / 100)
-}
-
 export function theoreticalBiomassAt100Kg(
-  pond: Pick<Pond, 'initialPopulation' | 'bonusStockedPercent'>,
+  pond: Pick<Pond, 'initialPopulation'>,
   currentWeightG: number,
 ) {
-  const population = stockedPopulation(pond)
-  if (population <= 0 || currentWeightG <= 0) return 0
-  return (population * currentWeightG) / 1000
+  if (pond.initialPopulation <= 0 || currentWeightG <= 0) return 0
+  return (pond.initialPopulation * currentWeightG) / 1000
 }
 
 export function technicalMetricsStatus(
-  pond: Pick<Pond, 'initialPopulation' | 'bonusStockedPercent'>,
+  pond: Pick<Pond, 'initialPopulation'>,
   input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'>,
 ) {
   const maximumBiomassKg = theoreticalBiomassAt100Kg(pond, input.currentWeightG)
@@ -196,7 +186,7 @@ export function technicalMetricsStatus(
 }
 
 export function calculateBiometry(
-  pond: Pick<Pond, 'initialPopulation' | 'bonusStockedPercent' | 'stockingDate'>,
+  pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
   input: BiometryInput,
   previousWeightG: number | null,
 ): CalculatedBiometry {
