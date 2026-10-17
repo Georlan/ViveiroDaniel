@@ -798,33 +798,34 @@ function TechnicalInconsistencyNote({
 }) {
   if (!status.hasFeedRate || status.isPlausible) return null
 
-  const minimumRatePercent = status.maximumBiomassKg > 0
-    ? Math.ceil((dailyFeedKg / status.maximumBiomassKg) * 10_000) / 100
+  const differenceKg = status.feedFor100Kg !== null
+    ? dailyFeedKg - status.feedFor100Kg
     : null
 
   return (
-    <div className="technical-warning-note" role="status">
-      <strong>Estimativa incompatível; a biometria pode ser salva.</strong>
-      <span>
-        Com {formatNumber(feedRatePercent, 2)}% e {formatNumber(dailyFeedKg, 2)} kg/dia,
-        a fórmula estimaria {formatNumber(round(status.biomassKg ?? 0))} kg de biomassa
-        e {formatNumber(round(status.survivalPercent ?? 0))}% de sobrevivência.
-        O máximo teórico para a população e o peso cadastrados é {formatNumber(round(status.maximumBiomassKg))} kg.
-      </span>
-      {status.feedFor100Kg !== null && minimumRatePercent !== null && (
+    <div className="technical-pending-note" role="status">
+      <strong>A referência de alimentação não explica a ração diária informada.</strong>
+      {status.feedFor100Kg !== null && differenceKg !== null && (
         <span>
-          Para conferir os dados: com a taxa informada, 100% de sobrevivência
-          corresponderia a cerca de {formatNumber(status.feedFor100Kg, 2)} kg/dia.
-          Mantendo a ração diária informada, a taxa precisaria ser de pelo menos
-          {' '}{formatNumber(minimumRatePercent, 2)}% para a conta não ultrapassar 100%.
-          Isso é apenas um limite matemático, não uma recomendação de alimentação.
+          Pela taxa considerada de {formatNumber(feedRatePercent, 2)}%, o peso e a
+          população cadastrados, a ração equivalente a 100% de sobrevivência seria
+          {' '}{formatNumber(status.feedFor100Kg, 2)} kg/dia. A ração informada foi
+          {' '}{formatNumber(dailyFeedKg, 2)} kg/dia, diferença de
+          {' '}{formatNumber(differenceKg, 2)} kg/dia.
         </span>
       )}
       <span>
-        Confira a ração por dia (não a acumulada), a população inicial e a taxa realmente usada.
-        Não altere o manejo só para eliminar o alerta. Peso, crescimento e ração acumulada
-        podem ser registrados normalmente; biomassa, sobrevivência e FCA ficam ocultos
-        enquanto a estimativa for inconsistente.
+        Inverter essa relação produziria {formatNumber(round(status.survivalPercent ?? 0, 1), 1)}%
+        de sobrevivência teórica, o que não é uma medição real e não pode ser
+        apresentado como sobrevivência do viveiro. A taxa da tabela por peso é
+        apenas referência; o manejo efetivo pode ser diferente.
+      </span>
+      <span>
+        A biometria pode ser salva normalmente. Confira se a ração informada
+        corresponde a um único dia e se a taxa utilizada representa o manejo.
+        Não mude a ração nem a taxa só para fazer a conta fechar.
+        Biomassa, sobrevivência e FCA não são exibidos enquanto a estimativa
+        estiver inconsistente.
       </span>
     </div>
   )
@@ -1790,7 +1791,7 @@ function SimpleBiometryForm({
                 </div>
                 <small>
                   Peso de referência mais próximo: {formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0)} g.
-                  Essa taxa será usada automaticamente nos cálculos.
+                  Essa é uma referência da tabela, não uma medição da taxa real. Se a ração diária não for compatível, os indicadores calculados serão sinalizados como incertos.
                 </small>
               </div>
             )}
@@ -1850,7 +1851,7 @@ function SimpleBiometryForm({
               <strong>Taxa de alimentação</strong>
               <small>
                 {tableRate
-                  ? 'Calculada pela tabela de peso → % biomassa'
+                  ? 'Referência aproximada pela tabela de peso → % biomassa'
                   : 'Fora da faixa da tabela — ajuste manual opcional'}
               </small>
             </span>
@@ -1865,7 +1866,7 @@ function SimpleBiometryForm({
                   formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0) +
                   ' g → ' +
                   formatNumber(tableRate.ratePercent, 1) +
-                  '%. Se o manejo real estiver diferente, ajuste abaixo.'
+                  '%. É apenas referência, não medição da sobrevivência. Ajuste somente se conhecer a taxa real do manejo.'
                 : 'A tabela fornecida cobre pesos de 0,2 g a 30 g. Fora dessa faixa, o app não extrapola nem inventa uma taxa.'}
             </p>
             <Field label="Ajustar taxa manualmente (%)">
