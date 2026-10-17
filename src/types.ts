@@ -30,6 +30,8 @@ export type Pond = {
   name: string
   areaHa: number
   initialPopulation: number
+  // Porcentagem adicional efetivamente povoada, informada separadamente da compra.
+  bonusStockedPercent?: number | null
   laboratory: string
   stockingDate: string
   cycleStartDate: string
