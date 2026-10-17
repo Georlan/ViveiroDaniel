@@ -708,6 +708,49 @@ function SyncPanel({
   )
 }
 
+function TechnicalInconsistencyNote({
+  status,
+  dailyFeedKg,
+  feedRatePercent,
+}: {
+  status: ReturnType<typeof technicalMetricsStatus>
+  dailyFeedKg: number
+  feedRatePercent: number
+}) {
+  if (!status.hasFeedRate || status.isPlausible) return null
+
+  const minimumRatePercent = status.maximumBiomassKg > 0
+    ? Math.ceil((dailyFeedKg / status.maximumBiomassKg) * 10_000) / 100
+    : null
+
+  return (
+    <div className="technical-warning-note" role="status">
+      <strong>Estimativa incompatível; a biometria pode ser salva.</strong>
+      <span>
+        Com {formatNumber(feedRatePercent, 2)}% e {formatNumber(dailyFeedKg, 2)} kg/dia,
+        a fórmula estimaria {formatNumber(round(status.biomassKg ?? 0))} kg de biomassa
+        e {formatNumber(round(status.survivalPercent ?? 0))}% de sobrevivência.
+        O máximo teórico para a população e o peso cadastrados é {formatNumber(round(status.maximumBiomassKg))} kg.
+      </span>
+      {status.feedFor100Kg !== null && minimumRatePercent !== null && (
+        <span>
+          Para conferir os dados: com a taxa informada, 100% de sobrevivência
+          corresponderia a cerca de {formatNumber(status.feedFor100Kg, 2)} kg/dia.
+          Mantendo a ração diária informada, a taxa precisaria ser de pelo menos
+          {' '}{formatNumber(minimumRatePercent, 2)}% para a conta não ultrapassar 100%.
+          Isso é apenas um limite matemático, não uma recomendação de alimentação.
+        </span>
+      )}
+      <span>
+        Confira a ração por dia (não a acumulada), a população inicial e a taxa realmente usada.
+        Não altere o manejo só para eliminar o alerta. Peso, crescimento e ração acumulada
+        podem ser registrados normalmente; biomassa, sobrevivência e FCA ficam ocultos
+        enquanto a estimativa for inconsistente.
+      </span>
+    </div>
+  )
+}
+
 function PondCard({
   pond,
   onOpen,
@@ -722,6 +765,8 @@ function PondCard({
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, localToday()))
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
+  const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
+  const previousTechnical = previous ? technicalMetricsStatus(pond, previous) : null
 
   return (
     <article className="pond-card actionable">
@@ -750,13 +795,22 @@ function PondCard({
             </div>
             <div className="metric-grid compact">
               <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
-              <Metric label="Biomassa" value={formatNumber(round(latest.biomassKg)) + ' kg'} />
-              <Metric label="Sobrevivência est." value={formatNumber(round(latest.survivalPercent)) + '%'} />
-              <Metric label="FCA" value={formatNumber(round(latest.fca, 2), 2)} />
+              <Metric label="Biomassa" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg' : '—'} />
+              <Metric label="Sobrevivência est." value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%' : '—'} />
+              <Metric label="FCA" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.fca ?? 0, 2), 2) : '—'} />
             </div>
+            {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
+              <div className="technical-pending-note">
+                <strong>Estimativa em revisão</strong>
+                <span>Dados medidos preservados; confira a taxa e a ração diária no detalhe.</span>
+              </div>
+            )}
             {lastChange && (
               <div className="card-change-summary">
-                Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g · biomassa {formatSigned(lastChange.biomassKg)} kg
+                Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g
+                {previousTechnical?.isPlausible && latestTechnical?.isPlausible
+                  ? ' · biomassa ' + formatSigned(lastChange.biomassKg) + ' kg'
+                  : ''}
               </div>
             )}
           </>
@@ -900,12 +954,11 @@ function PondDetail({
           )}
 
           {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
-            <div className="technical-warning-note">
-              <strong>Taxa incompatível com os dados desta biometria</strong>
-              <span>
-                Essa taxa gera biomassa ou sobrevivência acima do limite físico do viveiro. Edite a biometria e corrija ou remova a taxa.
-              </span>
-            </div>
+            <TechnicalInconsistencyNote
+              status={latestTechnical}
+              dailyFeedKg={latest.dailyFeedKg}
+              feedRatePercent={latest.feedRatePercent}
+            />
           )}
 
           <ChangeSummary pond={pond} />
@@ -1555,13 +1608,6 @@ function SimpleBiometryForm({
       return
     }
 
-    if (previewTechnical?.hasFeedRate && !previewTechnical.isPlausible) {
-      setError(
-        'A taxa usada gera biomassa ou sobrevivência acima do limite físico do viveiro. Revise a ração ou ajuste a taxa manualmente.',
-      )
-      return
-    }
-
     onSave({
       ...(initial ?? {}),
       id: initial?.id ?? id('bio'),
@@ -1813,13 +1859,11 @@ function SimpleBiometryForm({
             )}
 
             {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
-              <div className="technical-warning-note">
-                <strong>Essa taxa não fecha com os dados informados.</strong>
-                <span>
-                  Ela resultaria em {formatNumber(round(previewTechnical.biomassKg ?? 0))} kg de biomassa e {formatNumber(round(previewTechnical.survivalPercent ?? 0))}% de sobrevivência.
-                  O máximo teórico neste peso é {formatNumber(round(previewTechnical.maximumBiomassKg))} kg. Revise a ração informada ou ajuste a taxa manualmente.
-                </span>
-              </div>
+              <TechnicalInconsistencyNote
+                status={previewTechnical}
+                dailyFeedKg={preview.dailyFeedKg}
+                feedRatePercent={preview.feedRatePercent}
+              />
             )}
           </div>
         )}
@@ -1887,6 +1931,7 @@ function LegacyBiometryEditForm({
   const preview = parsed
     ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
     : null
+  const previewTechnical = preview ? technicalMetricsStatus(pond, preview) : null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -1998,11 +2043,22 @@ function LegacyBiometryEditForm({
             <span className="eyebrow">Resultado após a correção</span>
             <div className="preview-grid">
               <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
-              <Metric label="Biomassa" value={formatNumber(round(preview.biomassKg)) + ' kg'} />
-              <Metric label="Sobrevivência est." value={formatNumber(round(preview.survivalPercent)) + '%'} />
-              <Metric label="Ração p/100%" value={formatNumber(round(preview.feedFor100Kg)) + ' kg'} />
-              <Metric label="FCA" value={formatNumber(round(preview.fca, 2), 2)} />
+              {previewTechnical?.isPlausible && (
+                <>
+                  <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
+                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
+                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
+                  <Metric label="FCA" value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
+                </>
+              )}
             </div>
+            {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
+              <TechnicalInconsistencyNote
+                status={previewTechnical}
+                dailyFeedKg={preview.dailyFeedKg}
+                feedRatePercent={preview.feedRatePercent}
+              />
+            )}
           </div>
         )}
 
