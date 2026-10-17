@@ -6,7 +6,8 @@ export type Change = {
 }
 
 const pondFields: Array<[keyof Pond, string]> = [
-  ['initialPopulation', 'População inicial'],
+  ['initialPopulation', 'População inicial (sem bônus)'],
+  ['bonusStockedPercent', 'Bônus efetivamente povoado (%)'],
   ['areaHa', 'Área (ha)'],
   ['stockingDate', 'Data de povoamento'],
   ['cycleStartDate', 'Início do ciclo'],
