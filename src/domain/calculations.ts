@@ -39,6 +39,33 @@ export function averageWeightFromSample(totalWeightG: number, sampleCount: numbe
   return totalWeightG / sampleCount
 }
 
+// A prévia e o salvamento só devem considerar campos realmente preenchidos.
+// Number('') seria 0 e geraria um resultado enganoso antes de informar a ração.
+export function isCompleteSimpleBiometryDraft(draft: {
+  date: string
+  sampleTotalWeightG: string
+  sampleCount: string
+  dailyFeedKg: string
+  periodFeedKg: string
+}) {
+  const values = [
+    draft.sampleTotalWeightG,
+    draft.sampleCount,
+    draft.dailyFeedKg,
+    draft.periodFeedKg,
+  ]
+
+  if (!draft.date || values.some((value) => !value.trim())) return false
+
+  const [sampleWeight, sampleCount, dailyFeed, periodFeed] = values.map(Number)
+  return (
+    Number.isFinite(sampleWeight) && sampleWeight > 0 &&
+    Number.isInteger(sampleCount) && sampleCount > 0 &&
+    Number.isFinite(dailyFeed) && dailyFeed >= 0 &&
+    Number.isFinite(periodFeed) && periodFeed >= 0
+  )
+}
+
 export function accumulatedFeedFromPeriod(previousAccumulatedKg: number, periodFeedKg: number) {
   return Math.max(0, previousAccumulatedKg) + Math.max(0, periodFeedKg)
 }
@@ -170,7 +197,10 @@ export function technicalMetricsStatus(
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
   const fca = biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : 0
   const tolerance = 0.000001
+  // Zero de ração no dia não significa zero de animais ou de biomassa.
   const isPlausible =
+    input.dailyFeedKg > 0 &&
+    maximumBiomassKg > 0 &&
     biomassKg <= maximumBiomassKg + tolerance &&
     survivalPercent <= 100 + tolerance
 

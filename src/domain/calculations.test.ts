@@ -6,6 +6,7 @@ import {
   compareBiometriesForDisplay,
   densityPerSquareMeter,
   feedRateFromWeightTable,
+  isCompleteSimpleBiometryDraft,
   normalizeBiometryInputs,
   preparationDays,
   round,
@@ -65,6 +66,36 @@ describe('pond calculations', () => {
 
     const suggested = suggestFeedRatePercent(9.18, HISTORICAL_FORMULA_FIXTURE)
     expect(suggested).toBe(3.5)
+  })
+
+  it('waits for all required fields before showing a simple biometry preview', () => {
+    const draft = {
+      date: '2026-10-17',
+      sampleTotalWeightG: '220',
+      sampleCount: '70',
+      dailyFeedKg: '32',
+      periodFeedKg: '155',
+    }
+
+    expect(isCompleteSimpleBiometryDraft(draft)).toBe(true)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, dailyFeedKg: '' })).toBe(false)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, periodFeedKg: '' })).toBe(false)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, sampleCount: '70.5' })).toBe(false)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, sampleTotalWeightG: '0' })).toBe(false)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, dailyFeedKg: '-1' })).toBe(false)
+    expect(isCompleteSimpleBiometryDraft({ ...draft, dailyFeedKg: '0' })).toBe(true)
+  })
+
+  it('does not infer a zero population when no feed was given on that day', () => {
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 3.14,
+      feedRatePercent: 4.5,
+      dailyFeedKg: 0,
+      accumulatedFeedKg: 382,
+    })
+
+    expect(status.hasFeedRate).toBe(true)
+    expect(status.isPlausible).toBe(false)
   })
 
   it('does not invent a feed-rate suggestion without real cycle history', () => {
