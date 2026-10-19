@@ -1871,8 +1871,6 @@ function SimpleBiometryForm({
               </details>
             )}
 
-            </div>
-
             {!previewTechnical?.hasFeedRate && (
               <p className="technical-inline-note">Sem taxa de alimentação: estimativas ocultas.</p>
             )}
