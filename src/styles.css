@@ -3606,3 +3606,86 @@ body {
     gap: 8px;
   }
 }
+
+/* Biometria no campo: informações essenciais primeiro, detalhes sob demanda */
+.simple-biometry-form .form-section-title {
+  margin: 5px 0 -6px;
+  font-size: .9rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.biometry-inline-result {
+  margin: -3px 0 3px;
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+
+.biometry-inline-result strong {
+  font-size: .9rem;
+  color: var(--accent-teal);
+}
+
+.technical-compact-note {
+  display: block;
+  padding: 0;
+}
+
+.technical-compact-note summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  padding: 11px 13px;
+  list-style: none;
+}
+
+.technical-compact-note summary::-webkit-details-marker,
+.biometry-extra-metrics summary::-webkit-details-marker {
+  display: none;
+}
+
+.technical-compact-note summary span {
+  white-space: nowrap;
+  font-size: .69rem;
+  color: #bddbd6;
+}
+
+.technical-compact-note p {
+  margin: 0;
+  padding: 0 13px 12px;
+  font-size: .7rem;
+  line-height: 1.55;
+}
+
+.technical-inline-note {
+  margin: 9px 0 0;
+  font-size: .74rem;
+  color: var(--text-muted);
+}
+
+.biometry-extra-metrics {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-card);
+  padding-top: 8px;
+}
+
+.biometry-extra-metrics summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 750;
+  font-size: .77rem;
+  color: var(--accent-teal);
+}
+
+.biometry-extra-metrics[open] summary {
+  margin-bottom: 10px;
+}
+
+.biometry-extra-metrics > small {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: .7rem;
+}
