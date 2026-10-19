@@ -11,6 +11,7 @@ import {
   preparationDays,
   round,
   feedRateFromWeightTable,
+  isCompleteSimpleBiometryDraft,
   technicalMetricsStatus,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
@@ -798,36 +799,23 @@ function TechnicalInconsistencyNote({
 }) {
   if (!status.hasFeedRate || status.isPlausible) return null
 
-  const differenceKg = status.feedFor100Kg !== null
-    ? dailyFeedKg - status.feedFor100Kg
-    : null
+  if (dailyFeedKg === 0) {
+    return <p className="technical-inline-note">Sem ração no dia: estimativas técnicas indisponíveis.</p>
+  }
 
   return (
-    <div className="technical-pending-note" role="status">
-      <strong>A referência de alimentação não explica a ração diária informada.</strong>
-      {status.feedFor100Kg !== null && differenceKg !== null && (
-        <span>
-          Pela taxa considerada de {formatNumber(feedRatePercent, 2)}%, o peso e a
-          população cadastrados, a ração equivalente a 100% de sobrevivência seria
-          {' '}{formatNumber(status.feedFor100Kg, 2)} kg/dia. A ração informada foi
-          {' '}{formatNumber(dailyFeedKg, 2)} kg/dia, diferença de
-          {' '}{formatNumber(differenceKg, 2)} kg/dia.
-        </span>
-      )}
-      <span>
-        Inverter essa relação produziria {formatNumber(round(status.survivalPercent ?? 0, 1), 1)}%
-        de sobrevivência teórica, o que não é uma medição real e não pode ser
-        apresentado como sobrevivência do viveiro. A taxa da tabela por peso é
-        apenas referência; o manejo efetivo pode ser diferente.
-      </span>
-      <span>
-        A biometria pode ser salva normalmente. Confira se a ração informada
-        corresponde a um único dia e se a taxa utilizada representa o manejo.
-        Não mude a ração nem a taxa só para fazer a conta fechar.
-        Biomassa, sobrevivência e FCA não são exibidos enquanto a estimativa
-        estiver inconsistente.
-      </span>
-    </div>
+    <details className="technical-pending-note technical-compact-note">
+      <summary>
+        <strong>Estimativas indisponíveis</strong>
+        <span>Ver motivo</span>
+      </summary>
+      <p>
+        A taxa de {formatNumber(feedRatePercent, 2)}% é uma referência. Com ela, o
+        limite teórico seria {formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia,
+        mas foram informados {formatNumber(dailyFeedKg, 2)} kg/dia.
+        Confira os dados se necessário; não altere a ração só para fechar a conta.
+      </p>
+    </details>
   )
 }
 
@@ -1028,8 +1016,8 @@ function PondDetail({
 
           {!latestTechnical?.hasFeedRate && (
             <div className="technical-pending-note">
-              <strong>Indicadores técnicos aguardando taxa de alimentação</strong>
-              <span>Biomassa, sobrevivência estimada, ração p/100% e FCA ficam ocultos até você informar uma taxa real do manejo.</span>
+              <strong>Estimativas indisponíveis</strong>
+              <span>Falta informar uma taxa de alimentação.</span>
             </div>
           )}
 
@@ -1636,7 +1624,7 @@ function SimpleBiometryForm({
   )
 
   const parsed: BiometryInput | null =
-    form.date && currentWeightG > 0 && Number(form.dailyFeedKg) >= 0
+    isCompleteSimpleBiometryDraft(form)
       ? {
           ...(initial ?? {}),
           id: initial?.id ?? 'preview',
@@ -1659,6 +1647,16 @@ function SimpleBiometryForm({
   function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
+
+    if (!isCompleteSimpleBiometryDraft(form)) {
+      setError('Revise a data, a amostra e os valores de ração.')
+      return
+    }
+
+    if (form.date < pond.stockingDate || form.date > localToday()) {
+      setError('Use a data real da biometria, entre o povoamento e hoje.')
+      return
+    }
 
     const duplicateDate = pond.biometries.some(
       (item) => item.id !== initial?.id && item.date === form.date,
@@ -1709,40 +1707,18 @@ function SimpleBiometryForm({
       onClose={onClose}
     >
       <form onSubmit={submit} className="form-grid simple-biometry-form">
-        {initial && (
-          <div className="correction-note">
-            <strong>Correção de registro passado</strong>
-            <span>
-              Ao salvar, o app recalcula automaticamente os valores derivados das biometrias seguintes,
-              como crescimento, ração acumulada e FCA quando dependerem deste registro.
-            </span>
-          </div>
-        )}
-
-        <div className="form-step">
-          <span className="form-step-number">1</span>
-          <div>
-            <strong>Quando foi feita?</strong>
-            <small>Use a data real da biometria.</small>
-          </div>
-        </div>
         <Field label="Data da biometria" required>
           <input
             required
             type="date"
             min={pond.stockingDate}
+            max={localToday()}
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
           />
         </Field>
 
-        <div className="form-step">
-          <span className="form-step-number">2</span>
-          <div>
-            <strong>Pese a amostra</strong>
-            <small>Digite só o peso total e quantos camarões foram pesados.</small>
-          </div>
-        </div>
+        <h3 className="form-section-title">Amostra</h3>
         <div className="two-cols">
           <Field label="Peso total da amostra (g)" required>
             <input
@@ -1768,44 +1744,14 @@ function SimpleBiometryForm({
           </Field>
         </div>
 
-        {currentWeightG > 0 && (
-          <>
-            <div className="sample-result">
-              <span>Peso médio calculado</span>
-              <strong>{formatNumber(currentWeightG, 2)} g</strong>
-              <small>
-                {formatNumber(sampleTotalWeightG, 0)} g ÷ {formatNumber(sampleCount)} animais
-                {draftPrevious
-                  ? ' · crescimento ' +
-                    formatSigned(currentWeightG - draftPrevious.currentWeightG, 2) +
-                    ' g'
-                  : ''}
-              </small>
-            </div>
-
-            {tableRate && !form.feedRatePercent && (
-              <div className="feed-rate-suggestion">
-                <div>
-                  <span>Taxa da tabela do viveiro</span>
-                  <strong>{formatNumber(tableRate.ratePercent, 1)}%</strong>
-                </div>
-                <small>
-                  Peso de referência mais próximo: {formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0)} g.
-                  Essa é uma referência da tabela, não uma medição da taxa real. Se a ração diária não for compatível, os indicadores calculados serão sinalizados como incertos.
-                </small>
-              </div>
-            )}
-          </>
+        {currentWeightG > 0 && Number.isInteger(sampleCount) && !preview && (
+          <p className="biometry-inline-result">
+            Peso médio: <strong>{formatNumber(currentWeightG, 2)} g</strong>
+          </p>
         )}
 
-        <div className="form-step">
-          <span className="form-step-number">3</span>
-          <div>
-            <strong>Informe a ração</strong>
-            <small>O app calcula o que for possível com os dados realmente informados.</small>
-          </div>
-        </div>
-        <Field label="Ração por dia agora (kg)" required>
+        <h3 className="form-section-title">Ração</h3>
+        <Field label="Ração do dia (kg)" required>
           <input
             required
             type="number"
@@ -1815,17 +1761,13 @@ function SimpleBiometryForm({
             value={form.dailyFeedKg}
             onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
           />
-          <small>
-            Digite somente o total de ração fornecido em um dia, em kg.
-            Não digite aqui o acumulado da semana ou do ciclo.
-            Exemplo: se são 32 kg todos os dias, informe 32.
-          </small>
+          <small>Total fornecido em um único dia.</small>
         </Field>
         <Field
           label={
             draftPrevious
-              ? 'Ração desde a biometria anterior (kg)'
-              : 'Ração fornecida até esta biometria (kg)'
+              ? 'Ração desde a última biometria (kg)'
+              : 'Ração desde o povoamento (kg)'
           }
           required
         >
@@ -1838,11 +1780,7 @@ function SimpleBiometryForm({
             value={form.periodFeedKg}
             onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
           />
-          <small>
-            Some toda a ração fornecida desde a última biometria (ou desde o povoamento na primeira).
-            Este número é diferente da ração de um único dia.
-            O app acrescenta ao acumulado anterior e refaz a cadeia se um registro antigo for corrigido.
-          </small>
+          <small>Soma de todos os dias deste intervalo.</small>
         </Field>
 
         <details className="technical-adjustment" open={!tableRate}>
@@ -1851,23 +1789,16 @@ function SimpleBiometryForm({
               <strong>Taxa de alimentação</strong>
               <small>
                 {tableRate
-                  ? 'Referência aproximada pela tabela de peso → % biomassa'
-                  : 'Fora da faixa da tabela — ajuste manual opcional'}
+                  ? 'Referência por peso · toque para ajustar'
+                  : 'Sem referência · informe se souber'}
               </small>
             </span>
             <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Sem taxa'}</b>
           </summary>
           <div className="technical-adjustment-body">
-            <p>
-              {tableRate
-                ? 'Para ' +
-                  formatNumber(currentWeightG, 2) +
-                  ' g, o app usa o ponto mais próximo da tabela: ' +
-                  formatNumber(tableRate.weightG, tableRate.weightG < 1 ? 1 : 0) +
-                  ' g → ' +
-                  formatNumber(tableRate.ratePercent, 1) +
-                  '%. É apenas referência, não medição da sobrevivência. Ajuste somente se conhecer a taxa real do manejo.'
-                : 'A tabela fornecida cobre pesos de 0,2 g a 30 g. Fora dessa faixa, o app não extrapola nem inventa uma taxa.'}
+            <p>{tableRate
+              ? 'Taxa sugerida pela tabela, não medida. Ajuste só se souber a taxa do manejo.'
+              : 'Peso fora da tabela (0,2 a 30 g). Informe a taxa se souber.'}
             </p>
             <Field label="Ajustar taxa manualmente (%)">
               <input
@@ -1916,9 +1847,7 @@ function SimpleBiometryForm({
 
         {preview && (
           <div className="preview-card auto-preview-card">
-            <span className="eyebrow">
-              {initial ? 'Resultado após a correção' : 'O app calcula para você'}
-            </span>
+            <span className="eyebrow">Resumo da biometria</span>
             <div className="preview-grid">
               <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
               {preview.previousWeightG === null ? (
@@ -1927,21 +1856,25 @@ function SimpleBiometryForm({
                 <Metric label="Ganho desde anterior" value={formatSigned(preview.growthG, 2) + ' g'} />
               )}
               <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
-              {previewTechnical?.isPlausible && (
-                <>
-                  <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
+            </div>
+
+            {previewTechnical?.isPlausible && (
+              <details className="biometry-extra-metrics">
+                <summary>Ver estimativas técnicas</summary>
+                <div className="preview-grid">
+                  <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
+                  <Metric label="FCA est." value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
                   <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-                  <Metric label="FCA" value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
-                </>
-              )}
+                </div>
+                <small>Estimativas calculadas com a taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
+              </details>
+            )}
+
             </div>
 
             {!previewTechnical?.hasFeedRate && (
-              <div className="technical-pending-note">
-                <strong>Você já pode salvar esta biometria.</strong>
-                <span>Biomassa, sobrevivência, ração p/100% e FCA aparecem depois que uma taxa real for informada.</span>
-              </div>
+              <p className="technical-inline-note">Sem taxa de alimentação: estimativas ocultas.</p>
             )}
 
             {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
