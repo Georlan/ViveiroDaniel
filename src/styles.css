@@ -3626,37 +3626,8 @@ body {
   color: var(--accent-teal);
 }
 
-.technical-compact-note {
-  display: block;
-  padding: 0;
-}
-
-.technical-compact-note summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  cursor: pointer;
-  padding: 11px 13px;
-  list-style: none;
-}
-
-.technical-compact-note summary::-webkit-details-marker,
 .biometry-extra-metrics summary::-webkit-details-marker {
   display: none;
-}
-
-.technical-compact-note summary span {
-  white-space: nowrap;
-  font-size: .69rem;
-  color: #bddbd6;
-}
-
-.technical-compact-note p {
-  margin: 0;
-  padding: 0 13px 12px;
-  font-size: .7rem;
-  line-height: 1.55;
 }
 
 .technical-inline-note {
@@ -3691,29 +3662,7 @@ body {
 }
 
 
-/* V01: medições primeiro, projeções calculadas identificadas, sem FAB sobreposto */
-.metric.metric-caution {
-  border-color: #9b6b25;
-  background: #30271b;
-}
-.metric.metric-caution strong,
-.history-values .conditional-value {
-  color: #f5ca87;
-}
-.metric-caveat {
-  margin: 9px 0 0;
-  color: #f5ca87;
-  font-size: .74rem;
-  line-height: 1.35;
-}
-.technical-compact-note {
-  border-color: #85602b;
-  background: #2c241a;
-}
-.technical-compact-note summary strong,
-.technical-compact-note summary span {
-  color: #f5ca87;
-}
+/* V01: medições primeiro, cálculos automáticos identificados, sem botão sobreposto */
 .weight-change-inline {
   margin: 13px 0 8px;
   font-size: .79rem;
@@ -3724,17 +3673,11 @@ body {
   font-size: .89rem;
 }
 .history-card {
-  grid-template-areas: "date values edit" "note note note";
+  grid-template-areas: "date values edit";
 }
 .history-date { grid-area: date; }
 .history-values { grid-area: values; }
 .history-edit-button { grid-area: edit; }
-.history-review-note {
-  grid-area: note;
-  color: #f5ca87;
-  font-size: .7rem;
-  line-height: 1.4;
-}
 .pond-extra-details {
   padding: 14px;
   background: var(--surface-raised);
@@ -3764,7 +3707,7 @@ body {
 }
 @media (max-width: 640px) {
   .history-card {
-    grid-template-areas: "date edit" "values values" "note note";
+    grid-template-areas: "date edit" "values values";
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .history-values {

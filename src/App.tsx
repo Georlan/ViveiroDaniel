@@ -764,39 +764,6 @@ function calculatedMetric(
       : formatNumber(round(value, 2), 2)
 }
 
-function TechnicalInconsistencyNote({
-  status,
-  dailyFeedKg,
-  feedRatePercent,
-}: {
-  status: ReturnType<typeof technicalMetricsStatus>
-  dailyFeedKg: number
-  feedRatePercent: number
-}) {
-  if (!status.hasFeedRate || status.isPlausible) return null
-
-  if (dailyFeedKg === 0) {
-    return <p className="technical-inline-note">Sem ração no dia: estimativas técnicas indisponíveis.</p>
-  }
-
-  return (
-    <details className="technical-pending-note technical-compact-note">
-      <summary>
-        <strong>Estimativa precisa de revisão</strong>
-        <span>Entenda</span>
-      </summary>
-      <p>
-        Com a taxa registrada de {formatNumber(feedRatePercent, 2)}%, o cálculo de
-        sobrevivência ultrapassa 100%. O limite teórico seria
-        {' '}{formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia, ante
-        {' '}{formatNumber(dailyFeedKg, 2)} kg/dia informados. Biomassa,
-        sobrevivência e FCA são cenários matemáticos, não medições confirmadas.
-        Não altere os dados apenas para fechar a conta.
-      </p>
-    </details>
-  )
-}
-
 function PondCard({
   pond,
   onOpen,
@@ -838,13 +805,10 @@ function PondCard({
             </div>
             <div className="metric-grid compact">
               <Metric label="Peso" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
-              <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
-              <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
-              <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
+              <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
+              <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
+              <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
             </div>
-            {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
-              <p className="metric-caveat">⚠ Projeção acima de 100%: cálculos não validados.</p>
-            )}
             {lastChange && (
               <div className="card-change-summary">
                 Ganho desde a anterior: {formatSigned(lastChange.weightG, 2)} g
@@ -972,9 +936,9 @@ function PondDetail({
             )}
             {latestTechnical?.hasCalculatedValues && (
               <>
-                <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={!latestTechnical.isPlausible} featured />
-                <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={!latestTechnical.isPlausible} />
-                <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={!latestTechnical.isPlausible} />
+                <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} featured />
+                <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
+                <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
                 <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
               </>
             )}
@@ -986,13 +950,6 @@ function PondDetail({
             </p>
           )}
 
-          {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
-            <TechnicalInconsistencyNote
-              status={latestTechnical}
-              dailyFeedKg={latest.dailyFeedKg}
-              feedRatePercent={latest.feedRatePercent}
-            />
-          )}
 
           <ChangeSummary pond={pond} />
         </>
@@ -1042,9 +999,9 @@ function PondDetail({
         <summary>Como o app calcula os indicadores?</summary>
         <p>
           Em cada biometria, você informa a amostra, a ração do dia e a ração fornecida no período.
-          Peso médio e ração acumulada vêm dos registros. Biomassa, sobrevivência e FCA são projeções
-          que usam a taxa de alimentação cadastrada; se a sobrevivência calculada passar de 100%,
-          o app mostra o resultado para conferência, mas não o trata como dado confirmado.
+          Peso médio e ração acumulada vêm dos registros. Biomassa, sobrevivência estimada e FCA
+          são calculados a partir da taxa de alimentação e da ração diária.
+          A sobrevivência exibida é uma estimativa matemática, não uma contagem dos animais.
         </p>
       </details>
     </section>
@@ -1081,13 +1038,10 @@ function HistorySection({
               </div>
               <div className="history-values">
                 <span><small>Peso</small>{formatNumber(row.currentWeightG, 2)} g</span>
-                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
-                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Sobrev. calc.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
-                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
+                <span><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
+                <span><small>Sobrev. est.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
+                <span><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
               </div>
-              {technical.hasCalculatedValues && !technical.isPlausible && (
-                <small className="history-review-note">⚠ Cálculo condicional: sobrevivência acima de 100%</small>
-              )}
               <button
                 className="history-edit-button"
                 onClick={() => onEditBiometry(row.id)}
@@ -1115,9 +1069,9 @@ function ChangeSummary({ pond }: { pond: Pond }) {
   )
 }
 
-function Metric({ label, value, featured = false, caution = false }: { label: string; value: string; featured?: boolean; caution?: boolean }) {
+function Metric({ label, value, featured = false }: { label: string; value: string; featured?: boolean }) {
   return (
-    <div className={['metric', featured ? 'featured' : '', caution ? 'metric-caution' : ''].filter(Boolean).join(' ')}>
+    <div className={featured ? 'metric featured' : 'metric'}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -1761,14 +1715,14 @@ function SimpleBiometryForm({
 
             {previewTechnical?.hasCalculatedValues && (
               <details className="biometry-extra-metrics">
-                <summary>{previewTechnical.isPlausible ? 'Ver estimativas técnicas' : 'Ver cálculos condicionais ⚠'}</summary>
+                <summary>Ver estimativas técnicas</summary>
                 <div className="preview-grid">
                   <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
                   <Metric label="FCA est." value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
                   <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
                 </div>
-                <small>{previewTechnical.isPlausible ? 'Estimativa' : 'Cenário não validado'} com taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
+                <small>Estimativas com taxa de alimentação de {formatNumber(preview.feedRatePercent, 1)}%.</small>
               </details>
             )}
 
@@ -1778,13 +1732,6 @@ function SimpleBiometryForm({
               </p>
             )}
 
-            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
-              <TechnicalInconsistencyNote
-                status={previewTechnical}
-                dailyFeedKg={preview.dailyFeedKg}
-                feedRatePercent={preview.feedRatePercent}
-              />
-            )}
           </div>
         )}
 
@@ -1963,7 +1910,7 @@ function LegacyBiometryEditForm({
             <span className="eyebrow">Resultado após a correção</span>
             <div className="preview-grid">
               <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
-              {previewTechnical?.isPlausible && (
+              {previewTechnical?.hasCalculatedValues && (
                 <>
                   <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
@@ -1972,13 +1919,6 @@ function LegacyBiometryEditForm({
                 </>
               )}
             </div>
-            {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
-              <TechnicalInconsistencyNote
-                status={previewTechnical}
-                dailyFeedKg={preview.dailyFeedKg}
-                feedRatePercent={preview.feedRatePercent}
-              />
-            )}
           </div>
         )}
 
