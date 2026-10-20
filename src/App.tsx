@@ -102,18 +102,6 @@ function formatSigned(value: number, decimals = 0) {
   return (value > 0 ? '+' : '') + formatNumber(value, decimals)
 }
 
-function movementWord(value: number) {
-  if (value > 0) return 'subiu'
-  if (value < 0) return 'caiu'
-  return 'ficou igual'
-}
-
-function movementArrow(value: number) {
-  if (value > 0) return '↑'
-  if (value < 0) return '↓'
-  return '→'
-}
-
 function id(prefix: string) {
   return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)
 }
@@ -865,8 +853,8 @@ function PondCard({
           </>
         ) : (
           <div className="empty-inline">
-            <strong>Primeira biometria ainda não realizada.</strong>
-            <span>O acompanhamento zootécnico começa quando você registrar a primeira medição real.</span>
+            <strong>Ainda sem biometria.</strong>
+            <span>Registre a primeira medição para acompanhar o crescimento.</span>
           </div>
         )}
 
@@ -1020,6 +1008,8 @@ function PondDetail({
         </div>
       )}
 
+      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
+
       <div className="product-summary-card">
         <div>
           <span className="eyebrow">Controle de insumos</span>
@@ -1033,15 +1023,9 @@ function PondDetail({
         <button className="secondary-button" onClick={onProducts}>Produtos / registrar uso</button>
       </div>
 
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Dados do viveiro</h2>
-          <p>Informações de cadastro e do lote.</p>
-        </div>
-        <button className="text-button" onClick={onEditPond}>Editar</button>
-      </div>
-
-      <div className="facts-grid">
+      <details className="pond-extra-details">
+        <summary>Dados do viveiro <span>Ver cadastro</span></summary>
+        <div className="facts-grid">
         <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
         <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
         <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
@@ -1051,17 +1035,16 @@ function PondDetail({
         <Fact label="Laboratório" value={pond.laboratory || '—'} />
         <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
         <Fact label="Raçoador" value={pond.feeder || '—'} />
-      </div>
-
-
-
-      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
+        </div>
+        <button className="secondary-button" onClick={onEditPond}>Editar cadastro</button>
+      </details>
       <details className="calculation-details">
         <summary>Como o app calcula os indicadores?</summary>
         <p>
           Em cada biometria, você informa a amostra, a ração do dia e a ração fornecida no período.
-          O app calcula peso médio, ração acumulada, biomassa, sobrevivência estimada, ração p/100% e FCA.
-          A taxa de alimentação é informada por você e, depois que houver histórico real deste ciclo, o app pode sugerir um valor com base nas medições anteriores.
+          Peso médio e ração acumulada vêm dos registros. Biomassa, sobrevivência e FCA são projeções
+          que usam a taxa de alimentação cadastrada; se a sobrevivência calculada passar de 100%,
+          o app mostra o resultado para conferência, mas não o trata como dado confirmado.
         </p>
       </details>
     </section>
