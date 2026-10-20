@@ -788,6 +788,20 @@ function HistoryPanel({ syncToken }: { syncToken: string }) {
   )
 }
 
+function calculatedMetric(
+  status: ReturnType<typeof technicalMetricsStatus> | null,
+  kind: 'biomassKg' | 'survivalPercent' | 'fca',
+) {
+  if (!status?.hasCalculatedValues) return 'Sem base'
+  const value = status[kind]
+  if (value === null || !Number.isFinite(value)) return 'Sem base'
+  return kind === 'biomassKg'
+    ? formatNumber(round(value)) + ' kg'
+    : kind === 'survivalPercent'
+      ? formatNumber(round(value)) + '%'
+      : formatNumber(round(value, 2), 2)
+}
+
 function TechnicalInconsistencyNote({
   status,
   dailyFeedKg,
@@ -806,14 +820,16 @@ function TechnicalInconsistencyNote({
   return (
     <details className="technical-pending-note technical-compact-note">
       <summary>
-        <strong>Estimativas indisponíveis</strong>
-        <span>Ver motivo</span>
+        <strong>Estimativa precisa de revisão</strong>
+        <span>Entenda</span>
       </summary>
       <p>
-        A taxa de {formatNumber(feedRatePercent, 2)}% é uma referência. Com ela, o
-        limite teórico seria {formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia,
-        mas foram informados {formatNumber(dailyFeedKg, 2)} kg/dia.
-        Confira os dados se necessário; não altere a ração só para fechar a conta.
+        Com a taxa registrada de {formatNumber(feedRatePercent, 2)}%, o cálculo de
+        sobrevivência ultrapassa 100%. O limite teórico seria
+        {' '}{formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia, ante
+        {' '}{formatNumber(dailyFeedKg, 2)} kg/dia informados. Biomassa,
+        sobrevivência e FCA são cenários matemáticos, não medições confirmadas.
+        Não altere os dados apenas para fechar a conta.
       </p>
     </details>
   )
@@ -834,7 +850,6 @@ function PondCard({
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
-  const previousTechnical = previous ? technicalMetricsStatus(pond, previous) : null
 
   return (
     <article className="pond-card actionable">
@@ -863,22 +878,16 @@ function PondCard({
             </div>
             <div className="metric-grid compact">
               <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
-              <Metric label="Biomassa" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg' : '—'} />
-              <Metric label="Sobrevivência est." value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%' : '—'} />
-              <Metric label="FCA" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.fca ?? 0, 2), 2) : '—'} />
+              <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
+              <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
+              <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
             </div>
-            {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
-              <div className="technical-pending-note">
-                <strong>Estimativa em revisão</strong>
-                <span>Dados medidos preservados; confira a taxa e a ração diária no detalhe.</span>
-              </div>
+            {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
+              <p className="metric-caveat">⚠ Projeção acima de 100%: cálculos não validados.</p>
             )}
             {lastChange && (
               <div className="card-change-summary">
-                Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g
-                {previousTechnical?.isPlausible && latestTechnical?.isPlausible
-                  ? ' · biomassa ' + formatSigned(lastChange.biomassKg) + ' kg'
-                  : ''}
+                Ganho desde a anterior: {formatSigned(lastChange.weightG, 2)} g
               </div>
             )}
           </>
@@ -1004,24 +1013,23 @@ function PondDetail({
                 <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
               </>
             )}
-            {latestTechnical?.isPlausible && (
+            {latestTechnical?.hasCalculatedValues && (
               <>
-                <Metric label="Biomassa" value={formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg'} featured />
-                <Metric label="Sobrevivência est." value={formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%'} />
-                <Metric label="FCA" value={formatNumber(round(latestTechnical.fca ?? 0, 2), 2)} />
+                <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={!latestTechnical.isPlausible} featured />
+                <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={!latestTechnical.isPlausible} />
+                <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={!latestTechnical.isPlausible} />
                 <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
               </>
             )}
           </div>
 
-          {!latestTechnical?.hasFeedRate && (
-            <div className="technical-pending-note">
-              <strong>Estimativas indisponíveis</strong>
-              <span>Falta informar uma taxa de alimentação.</span>
-            </div>
+          {!latestTechnical?.hasCalculatedValues && (
+            <p className="technical-inline-note">
+              {!latestTechnical?.hasFeedRate ? 'Sem taxa informada para estimar.' : 'Sem ração do dia para estimar.'}
+            </p>
           )}
 
-          {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
+          {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
             <TechnicalInconsistencyNote
               status={latestTechnical}
               dailyFeedKg={latest.dailyFeedKg}
@@ -1121,10 +1129,13 @@ function HistorySection({
               </div>
               <div className="history-values">
                 <span><small>Peso</small>{formatNumber(row.currentWeightG, 1)} g</span>
-                <span><small>Biomassa</small>{technical.isPlausible ? formatNumber(round(technical.biomassKg ?? 0)) + ' kg' : '—'}</span>
-                <span><small>Sobrev.</small>{technical.isPlausible ? formatNumber(round(technical.survivalPercent ?? 0)) + '%' : '—'}</span>
-                <span><small>FCA</small>{technical.isPlausible ? formatNumber(round(technical.fca ?? 0, 2), 2) : '—'}</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Sobrev. calc.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
               </div>
+              {technical.hasCalculatedValues && !technical.isPlausible && (
+                <small className="history-review-note">⚠ Cálculo condicional: sobrevivência acima de 100%</small>
+              )}
               <button
                 className="history-edit-button"
                 onClick={() => onEditBiometry(row.id)}
@@ -1214,9 +1225,9 @@ function ChangeSummary({ pond }: { pond: Pond }) {
   )
 }
 
-function Metric({ label, value, featured = false }: { label: string; value: string; featured?: boolean }) {
+function Metric({ label, value, featured = false, caution = false }: { label: string; value: string; featured?: boolean; caution?: boolean }) {
   return (
-    <div className={featured ? 'metric featured' : 'metric'}>
+    <div className={['metric', featured ? 'featured' : '', caution ? 'metric-caution' : ''].filter(Boolean).join(' ')}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -1858,24 +1869,26 @@ function SimpleBiometryForm({
               <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
             </div>
 
-            {previewTechnical?.isPlausible && (
+            {previewTechnical?.hasCalculatedValues && (
               <details className="biometry-extra-metrics">
-                <summary>Ver estimativas técnicas</summary>
+                <summary>{previewTechnical.isPlausible ? 'Ver estimativas técnicas' : 'Ver cálculos condicionais ⚠'}</summary>
                 <div className="preview-grid">
                   <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
                   <Metric label="FCA est." value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
                   <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
                 </div>
-                <small>Estimativas calculadas com a taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
+                <small>{previewTechnical.isPlausible ? 'Estimativa' : 'Cenário não validado'} com taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
               </details>
             )}
 
-            {!previewTechnical?.hasFeedRate && (
-              <p className="technical-inline-note">Sem taxa de alimentação: estimativas ocultas.</p>
+            {!previewTechnical?.hasCalculatedValues && (
+              <p className="technical-inline-note">
+                {!previewTechnical?.hasFeedRate ? 'Falta taxa de alimentação.' : 'Sem ração no dia para estimar.'}
+              </p>
             )}
 
-            {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
+            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
               <TechnicalInconsistencyNote
                 status={previewTechnical}
                 dailyFeedKg={preview.dailyFeedKg}
