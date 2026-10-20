@@ -195,6 +195,23 @@ describe('pond calculations', () => {
     expect(status.fca).toBeCloseTo(0.5372, 3)
   })
 
+  it('matches the spreadsheet example without truncating the estimated survival at 100%', () => {
+    // Planilha: 220.000 animais × 3,15 g × 4,5% = 31,185 kg/dia.
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: 3.15,
+      feedRatePercent: 4.5,
+      dailyFeedKg: 32,
+      accumulatedFeedKg: 382,
+    })
+
+    expect(status.feedFor100Kg).toBeCloseTo(31.185, 3)
+    expect(status.hasCalculatedValues).toBe(true)
+    expect(status.survivalPercent).toBeCloseTo(32 / 31.185 * 100, 5)
+    expect(round(status.survivalPercent ?? 0)).toBe(103)
+    expect(status.biomassKg).toBeCloseTo(711.111, 2)
+    expect(status.fca).toBeCloseTo(382 / (32 / 0.045), 5)
+  })
+
   it('calculates the growth from full precision, not rounded displayed weights', () => {
     const previous = { currentWeightG: 2.27 } as ReturnType<typeof calculateHistory>[number]
     const current = { currentWeightG: 220 / 70 } as ReturnType<typeof calculateHistory>[number]
