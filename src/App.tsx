@@ -501,7 +501,6 @@ export default function App() {
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
-            onEditPond={(id) => setModal({ kind: 'pond', editId: id })}
             onProducts={() => setModal({ kind: 'products' })}
             syncToken={syncToken}
             syncStatus={syncStatus}
@@ -514,10 +513,6 @@ export default function App() {
           />
         )}
       </main>
-
-      <button className="fab" onClick={() => setModal(selected ? { kind: 'biometry' } : { kind: 'pond' })}>
-        <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
-      </button>
 
       {modal?.kind === 'pond' && (
         <PondForm
@@ -550,7 +545,6 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
-  onEditPond,
   onProducts,
   syncToken,
   syncStatus,
@@ -564,7 +558,6 @@ function Dashboard({
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
-  onEditPond: (id: string) => void
   onProducts: () => void
   syncToken: string | null
   syncStatus: SyncStatus
@@ -575,23 +568,23 @@ function Dashboard({
   onSyncNow: () => void
   onDisconnectSync: () => void
 }) {
-  const withBiometry = ponds.filter((pond) => pond.biometries.length > 0).length
-
   return (
     <section className="page">
-      <div className="summary-bar">
+      <div className="section-heading compact-heading">
         <div>
-          <strong>{ponds.length}</strong>
-          <span>viveiros</span>
+          <h2>Produção em andamento</h2>
         </div>
-        <div>
-          <strong>{withBiometry}</strong>
-          <span>com biometria</span>
-        </div>
-        <div>
-          <strong>{ponds.length - withBiometry}</strong>
-          <span>aguardando</span>
-        </div>
+        <button className="text-button" onClick={onAdd}>Adicionar</button>
+      </div>
+
+      <div className="pond-list">
+        {ponds.map((pond) => (
+          <PondCard
+            pond={pond}
+            key={pond.id}
+            onOpen={() => onOpen(pond.id)}
+          />
+        ))}
       </div>
 
       <SyncPanel
@@ -610,29 +603,10 @@ function Dashboard({
         <div>
           <span className="eyebrow">Aplicações</span>
           <strong>Controle de uso de produtos</strong>
-          <p>Registre data, produto, quantidade e unidade para acompanhar o consumo por período.</p>
+          <p>Consulte os insumos utilizados.</p>
         </div>
         <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
       </article>
-
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Produção em andamento</h2>
-          <p>Resumo fiel aos dados disponíveis.</p>
-        </div>
-        <button className="text-button" onClick={onAdd}>Adicionar</button>
-      </div>
-
-      <div className="pond-list">
-        {ponds.map((pond) => (
-          <PondCard
-            pond={pond}
-            key={pond.id}
-            onOpen={() => onOpen(pond.id)}
-            onEdit={() => onEditPond(pond.id)}
-          />
-        ))}
-      </div>
 
       <div className="storage-note">
         <strong>{syncToken ? 'Fonte compartilhada ativa' : 'Dados salvos neste aparelho'}</strong>
@@ -838,15 +812,13 @@ function TechnicalInconsistencyNote({
 function PondCard({
   pond,
   onOpen,
-  onEdit,
 }: {
   pond: Pond
   onOpen: () => void
-  onEdit: () => void
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, localToday()))
+  const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, localToday()) + 1)
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
@@ -868,7 +840,7 @@ function PondCard({
 
         <div className="report-context">
           <span>Povoado em {formatDate(pond.stockingDate)}</span>
-          <strong>{cultivationDays} dias de cultivo</strong>
+          <strong>Hoje: dia {cultivationDay}</strong>
         </div>
 
         {latest ? (
@@ -877,7 +849,7 @@ function PondCard({
               Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
             </div>
             <div className="metric-grid compact">
-              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
+              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
               <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
               <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
               <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
@@ -904,9 +876,6 @@ function PondCard({
         </div>
       </button>
 
-      <div className="pond-card-footer">
-        <button className="pond-edit-button" onClick={onEdit}>Editar dados iniciais</button>
-      </div>
     </article>
   )
 }
@@ -1128,7 +1097,7 @@ function HistorySection({
                 <span>{formatDate(row.date)}</span>
               </div>
               <div className="history-values">
-                <span><small>Peso</small>{formatNumber(row.currentWeightG, 1)} g</span>
+                <span><small>Peso</small>{formatNumber(row.currentWeightG, 2)} g</span>
                 <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
                 <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Sobrev. calc.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
                 <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
@@ -1155,73 +1124,11 @@ function HistorySection({
 function ChangeSummary({ pond }: { pond: Pond }) {
   const history = calculateHistory(pond)
   if (history.length < 2) return null
-
-  const previous = history[history.length - 2]
-  const latest = history[history.length - 1]
-  const delta = compareBiometriesForDisplay(previous, latest)
-  const previousTechnical = technicalMetricsStatus(pond, previous)
-  const latestTechnical = technicalMetricsStatus(pond, latest)
-
-  const changes = [
-    {
-      label: 'Peso médio',
-      value: formatSigned(delta.weightG, 1) + ' g',
-      sentence: movementWord(delta.weightG),
-      arrow: movementArrow(delta.weightG),
-    },
-    ...(previousTechnical.isPlausible && latestTechnical.isPlausible
-      ? [
-          {
-            label: 'Biomassa estimada',
-            value: formatSigned(delta.biomassKg) + ' kg',
-            sentence: movementWord(delta.biomassKg),
-            arrow: movementArrow(delta.biomassKg),
-          },
-          {
-            label: 'Sobrevivência estimada',
-            value: formatSigned(delta.survivalPercentagePoints) + ' p.p.',
-            sentence: movementWord(delta.survivalPercentagePoints),
-            arrow: movementArrow(delta.survivalPercentagePoints),
-          },
-          {
-            label: 'FCA',
-            value: formatSigned(delta.fca, 2),
-            sentence: movementWord(delta.fca),
-            arrow: movementArrow(delta.fca),
-          },
-        ]
-      : []),
-  ]
-
+  const delta = compareBiometriesForDisplay(history[history.length - 2], history[history.length - 1])
   return (
-    <article className="change-card">
-      <div className="change-card-head">
-        <div>
-          <span className="eyebrow">Comparação simples</span>
-          <h2>O que mudou desde a biometria anterior?</h2>
-          <p>
-            {formatDate(previous.date)} → {formatDate(latest.date)}
-          </p>
-        </div>
-      </div>
-
-      <div className="change-grid">
-        {changes.map((item) => (
-          <div className="change-item" key={item.label}>
-            <span className="change-arrow" aria-hidden="true">{item.arrow}</span>
-            <div>
-              <small>{item.label}</small>
-              <strong>{item.value}</strong>
-              <span>{item.sentence}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <p className="change-footnote">
-        A comparação usa apenas indicadores disponíveis e consistentes. Se faltar taxa válida, o app compara somente o peso.
-      </p>
-    </article>
+    <p className="weight-change-inline">
+      Crescimento desde a anterior: <strong>{formatSigned(delta.weightG, 2)} g</strong>
+    </p>
   )
 }
 
