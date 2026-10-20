@@ -179,6 +179,28 @@ describe('pond calculations', () => {
     expect(mathematicallyConsistent.isPlausible).toBe(true)
   })
 
+  it('keeps conditional calculations available when the theoretical survival exceeds 100%', () => {
+    const weight = averageWeightFromSample(220, 70)
+    const status = technicalMetricsStatus(v01, {
+      currentWeightG: weight,
+      feedRatePercent: 4.5,
+      dailyFeedKg: 32,
+      accumulatedFeedKg: 382,
+    })
+
+    expect(status.hasCalculatedValues).toBe(true)
+    expect(status.isPlausible).toBe(false)
+    expect(status.biomassKg).toBeCloseTo(711.11, 2)
+    expect(status.survivalPercent).toBeGreaterThan(100)
+    expect(status.fca).toBeCloseTo(0.5372, 3)
+  })
+
+  it('calculates the growth from full precision, not rounded displayed weights', () => {
+    const previous = { currentWeightG: 2.27 } as ReturnType<typeof calculateHistory>[number]
+    const current = { currentWeightG: 220 / 70 } as ReturnType<typeof calculateHistory>[number]
+    expect(compareBiometriesForDisplay(previous, current).weightG).toBe(0.87)
+  })
+
   it('allows a first biometry without inventing a feed rate', () => {
     const status = technicalMetricsStatus(v01, {
       currentWeightG: 5.14,

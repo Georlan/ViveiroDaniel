@@ -3689,3 +3689,91 @@ body {
   color: var(--text-muted);
   font-size: .7rem;
 }
+
+
+/* V01: medições primeiro, projeções calculadas identificadas, sem FAB sobreposto */
+.metric.metric-caution {
+  border-color: #9b6b25;
+  background: #30271b;
+}
+.metric.metric-caution strong,
+.history-values .conditional-value {
+  color: #f5ca87;
+}
+.metric-caveat {
+  margin: 9px 0 0;
+  color: #f5ca87;
+  font-size: .74rem;
+  line-height: 1.35;
+}
+.technical-compact-note {
+  border-color: #85602b;
+  background: #2c241a;
+}
+.technical-compact-note summary strong,
+.technical-compact-note summary span {
+  color: #f5ca87;
+}
+.weight-change-inline {
+  margin: 13px 0 8px;
+  font-size: .79rem;
+  color: var(--text-muted);
+}
+.weight-change-inline strong {
+  color: var(--text-main);
+  font-size: .89rem;
+}
+.history-card {
+  grid-template-areas: "date values edit" "note note note";
+}
+.history-date { grid-area: date; }
+.history-values { grid-area: values; }
+.history-edit-button { grid-area: edit; }
+.history-review-note {
+  grid-area: note;
+  color: #f5ca87;
+  font-size: .7rem;
+  line-height: 1.4;
+}
+.pond-extra-details {
+  padding: 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-card);
+  border-radius: 16px;
+}
+.pond-extra-details summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-main);
+  font-weight: 800;
+}
+.pond-extra-details summary::-webkit-details-marker {
+  display: none;
+}
+.pond-extra-details summary span {
+  color: var(--accent-teal);
+  font-size: .74rem;
+  font-weight: 700;
+}
+.pond-extra-details .facts-grid {
+  margin: 15px 0 12px;
+}
+@media (max-width: 640px) {
+  .history-card {
+    grid-template-areas: "date edit" "values values" "note note";
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .history-values {
+    min-width: 0;
+  }
+  .history-values span {
+    font-size: .78rem;
+  }
+  .history-values small {
+    font-size: .65rem;
+  }
+}

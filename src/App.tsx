@@ -102,18 +102,6 @@ function formatSigned(value: number, decimals = 0) {
   return (value > 0 ? '+' : '') + formatNumber(value, decimals)
 }
 
-function movementWord(value: number) {
-  if (value > 0) return 'subiu'
-  if (value < 0) return 'caiu'
-  return 'ficou igual'
-}
-
-function movementArrow(value: number) {
-  if (value > 0) return '↑'
-  if (value < 0) return '↓'
-  return '→'
-}
-
 function id(prefix: string) {
   return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)
 }
@@ -501,7 +489,6 @@ export default function App() {
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
-            onEditPond={(id) => setModal({ kind: 'pond', editId: id })}
             onProducts={() => setModal({ kind: 'products' })}
             syncToken={syncToken}
             syncStatus={syncStatus}
@@ -514,10 +501,6 @@ export default function App() {
           />
         )}
       </main>
-
-      <button className="fab" onClick={() => setModal(selected ? { kind: 'biometry' } : { kind: 'pond' })}>
-        <span>＋</span> {selected ? 'Registrar biometria' : 'Novo viveiro'}
-      </button>
 
       {modal?.kind === 'pond' && (
         <PondForm
@@ -550,7 +533,6 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
-  onEditPond,
   onProducts,
   syncToken,
   syncStatus,
@@ -564,7 +546,6 @@ function Dashboard({
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
-  onEditPond: (id: string) => void
   onProducts: () => void
   syncToken: string | null
   syncStatus: SyncStatus
@@ -575,23 +556,23 @@ function Dashboard({
   onSyncNow: () => void
   onDisconnectSync: () => void
 }) {
-  const withBiometry = ponds.filter((pond) => pond.biometries.length > 0).length
-
   return (
     <section className="page">
-      <div className="summary-bar">
+      <div className="section-heading compact-heading">
         <div>
-          <strong>{ponds.length}</strong>
-          <span>viveiros</span>
+          <h2>Produção em andamento</h2>
         </div>
-        <div>
-          <strong>{withBiometry}</strong>
-          <span>com biometria</span>
-        </div>
-        <div>
-          <strong>{ponds.length - withBiometry}</strong>
-          <span>aguardando</span>
-        </div>
+        <button className="text-button" onClick={onAdd}>Adicionar</button>
+      </div>
+
+      <div className="pond-list">
+        {ponds.map((pond) => (
+          <PondCard
+            pond={pond}
+            key={pond.id}
+            onOpen={() => onOpen(pond.id)}
+          />
+        ))}
       </div>
 
       <SyncPanel
@@ -610,29 +591,10 @@ function Dashboard({
         <div>
           <span className="eyebrow">Aplicações</span>
           <strong>Controle de uso de produtos</strong>
-          <p>Registre data, produto, quantidade e unidade para acompanhar o consumo por período.</p>
+          <p>Consulte os insumos utilizados.</p>
         </div>
         <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
       </article>
-
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Produção em andamento</h2>
-          <p>Resumo fiel aos dados disponíveis.</p>
-        </div>
-        <button className="text-button" onClick={onAdd}>Adicionar</button>
-      </div>
-
-      <div className="pond-list">
-        {ponds.map((pond) => (
-          <PondCard
-            pond={pond}
-            key={pond.id}
-            onOpen={() => onOpen(pond.id)}
-            onEdit={() => onEditPond(pond.id)}
-          />
-        ))}
-      </div>
 
       <div className="storage-note">
         <strong>{syncToken ? 'Fonte compartilhada ativa' : 'Dados salvos neste aparelho'}</strong>
@@ -788,6 +750,20 @@ function HistoryPanel({ syncToken }: { syncToken: string }) {
   )
 }
 
+function calculatedMetric(
+  status: ReturnType<typeof technicalMetricsStatus> | null,
+  kind: 'biomassKg' | 'survivalPercent' | 'fca',
+) {
+  if (!status?.hasCalculatedValues) return 'Sem base'
+  const value = status[kind]
+  if (value === null || !Number.isFinite(value)) return 'Sem base'
+  return kind === 'biomassKg'
+    ? formatNumber(round(value)) + ' kg'
+    : kind === 'survivalPercent'
+      ? formatNumber(round(value)) + '%'
+      : formatNumber(round(value, 2), 2)
+}
+
 function TechnicalInconsistencyNote({
   status,
   dailyFeedKg,
@@ -806,14 +782,16 @@ function TechnicalInconsistencyNote({
   return (
     <details className="technical-pending-note technical-compact-note">
       <summary>
-        <strong>Estimativas indisponíveis</strong>
-        <span>Ver motivo</span>
+        <strong>Estimativa precisa de revisão</strong>
+        <span>Entenda</span>
       </summary>
       <p>
-        A taxa de {formatNumber(feedRatePercent, 2)}% é uma referência. Com ela, o
-        limite teórico seria {formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia,
-        mas foram informados {formatNumber(dailyFeedKg, 2)} kg/dia.
-        Confira os dados se necessário; não altere a ração só para fechar a conta.
+        Com a taxa registrada de {formatNumber(feedRatePercent, 2)}%, o cálculo de
+        sobrevivência ultrapassa 100%. O limite teórico seria
+        {' '}{formatNumber(status.feedFor100Kg ?? 0, 2)} kg/dia, ante
+        {' '}{formatNumber(dailyFeedKg, 2)} kg/dia informados. Biomassa,
+        sobrevivência e FCA são cenários matemáticos, não medições confirmadas.
+        Não altere os dados apenas para fechar a conta.
       </p>
     </details>
   )
@@ -822,19 +800,16 @@ function TechnicalInconsistencyNote({
 function PondCard({
   pond,
   onOpen,
-  onEdit,
 }: {
   pond: Pond
   onOpen: () => void
-  onEdit: () => void
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, localToday()))
+  const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, localToday()) + 1)
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
-  const previousTechnical = previous ? technicalMetricsStatus(pond, previous) : null
 
   return (
     <article className="pond-card actionable">
@@ -853,7 +828,7 @@ function PondCard({
 
         <div className="report-context">
           <span>Povoado em {formatDate(pond.stockingDate)}</span>
-          <strong>{cultivationDays} dias de cultivo</strong>
+          <strong>Hoje: dia {cultivationDay}</strong>
         </div>
 
         {latest ? (
@@ -862,30 +837,24 @@ function PondCard({
               Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
             </div>
             <div className="metric-grid compact">
-              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 1) + ' g'} />
-              <Metric label="Biomassa" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg' : '—'} />
-              <Metric label="Sobrevivência est." value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%' : '—'} />
-              <Metric label="FCA" value={latestTechnical?.isPlausible ? formatNumber(round(latestTechnical.fca ?? 0, 2), 2) : '—'} />
+              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
+              <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
+              <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
+              <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={Boolean(latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)} />
             </div>
-            {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
-              <div className="technical-pending-note">
-                <strong>Estimativa em revisão</strong>
-                <span>Dados medidos preservados; confira a taxa e a ração diária no detalhe.</span>
-              </div>
+            {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
+              <p className="metric-caveat">⚠ Projeção acima de 100%: cálculos não validados.</p>
             )}
             {lastChange && (
               <div className="card-change-summary">
-                Desde a anterior: peso {formatSigned(lastChange.weightG, 1)} g
-                {previousTechnical?.isPlausible && latestTechnical?.isPlausible
-                  ? ' · biomassa ' + formatSigned(lastChange.biomassKg) + ' kg'
-                  : ''}
+                Ganho desde a anterior: {formatSigned(lastChange.weightG, 2)} g
               </div>
             )}
           </>
         ) : (
           <div className="empty-inline">
-            <strong>Primeira biometria ainda não realizada.</strong>
-            <span>O acompanhamento zootécnico começa quando você registrar a primeira medição real.</span>
+            <strong>Ainda sem biometria.</strong>
+            <span>Registre a primeira medição para acompanhar o crescimento.</span>
           </div>
         )}
 
@@ -895,9 +864,6 @@ function PondCard({
         </div>
       </button>
 
-      <div className="pond-card-footer">
-        <button className="pond-edit-button" onClick={onEdit}>Editar dados iniciais</button>
-      </div>
     </article>
   )
 }
@@ -1004,24 +970,23 @@ function PondDetail({
                 <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
               </>
             )}
-            {latestTechnical?.isPlausible && (
+            {latestTechnical?.hasCalculatedValues && (
               <>
-                <Metric label="Biomassa" value={formatNumber(round(latestTechnical.biomassKg ?? 0)) + ' kg'} featured />
-                <Metric label="Sobrevivência est." value={formatNumber(round(latestTechnical.survivalPercent ?? 0)) + '%'} />
-                <Metric label="FCA" value={formatNumber(round(latestTechnical.fca ?? 0, 2), 2)} />
+                <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} caution={!latestTechnical.isPlausible} featured />
+                <Metric label="Sobrev. calc." value={calculatedMetric(latestTechnical, 'survivalPercent')} caution={!latestTechnical.isPlausible} />
+                <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} caution={!latestTechnical.isPlausible} />
                 <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
               </>
             )}
           </div>
 
-          {!latestTechnical?.hasFeedRate && (
-            <div className="technical-pending-note">
-              <strong>Estimativas indisponíveis</strong>
-              <span>Falta informar uma taxa de alimentação.</span>
-            </div>
+          {!latestTechnical?.hasCalculatedValues && (
+            <p className="technical-inline-note">
+              {!latestTechnical?.hasFeedRate ? 'Sem taxa informada para estimar.' : 'Sem ração do dia para estimar.'}
+            </p>
           )}
 
-          {latestTechnical?.hasFeedRate && !latestTechnical.isPlausible && (
+          {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
             <TechnicalInconsistencyNote
               status={latestTechnical}
               dailyFeedKg={latest.dailyFeedKg}
@@ -1043,6 +1008,8 @@ function PondDetail({
         </div>
       )}
 
+      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
+
       <div className="product-summary-card">
         <div>
           <span className="eyebrow">Controle de insumos</span>
@@ -1056,15 +1023,9 @@ function PondDetail({
         <button className="secondary-button" onClick={onProducts}>Produtos / registrar uso</button>
       </div>
 
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Dados do viveiro</h2>
-          <p>Informações de cadastro e do lote.</p>
-        </div>
-        <button className="text-button" onClick={onEditPond}>Editar</button>
-      </div>
-
-      <div className="facts-grid">
+      <details className="pond-extra-details">
+        <summary>Dados do viveiro <span>Ver cadastro</span></summary>
+        <div className="facts-grid">
         <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
         <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
         <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
@@ -1074,17 +1035,16 @@ function PondDetail({
         <Fact label="Laboratório" value={pond.laboratory || '—'} />
         <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
         <Fact label="Raçoador" value={pond.feeder || '—'} />
-      </div>
-
-
-
-      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
+        </div>
+        <button className="secondary-button" onClick={onEditPond}>Editar cadastro</button>
+      </details>
       <details className="calculation-details">
         <summary>Como o app calcula os indicadores?</summary>
         <p>
           Em cada biometria, você informa a amostra, a ração do dia e a ração fornecida no período.
-          O app calcula peso médio, ração acumulada, biomassa, sobrevivência estimada, ração p/100% e FCA.
-          A taxa de alimentação é informada por você e, depois que houver histórico real deste ciclo, o app pode sugerir um valor com base nas medições anteriores.
+          Peso médio e ração acumulada vêm dos registros. Biomassa, sobrevivência e FCA são projeções
+          que usam a taxa de alimentação cadastrada; se a sobrevivência calculada passar de 100%,
+          o app mostra o resultado para conferência, mas não o trata como dado confirmado.
         </p>
       </details>
     </section>
@@ -1120,11 +1080,14 @@ function HistorySection({
                 <span>{formatDate(row.date)}</span>
               </div>
               <div className="history-values">
-                <span><small>Peso</small>{formatNumber(row.currentWeightG, 1)} g</span>
-                <span><small>Biomassa</small>{technical.isPlausible ? formatNumber(round(technical.biomassKg ?? 0)) + ' kg' : '—'}</span>
-                <span><small>Sobrev.</small>{technical.isPlausible ? formatNumber(round(technical.survivalPercent ?? 0)) + '%' : '—'}</span>
-                <span><small>FCA</small>{technical.isPlausible ? formatNumber(round(technical.fca ?? 0, 2), 2) : '—'}</span>
+                <span><small>Peso</small>{formatNumber(row.currentWeightG, 2)} g</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>Sobrev. calc.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
+                <span className={technical.hasCalculatedValues && !technical.isPlausible ? 'conditional-value' : ''}><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
               </div>
+              {technical.hasCalculatedValues && !technical.isPlausible && (
+                <small className="history-review-note">⚠ Cálculo condicional: sobrevivência acima de 100%</small>
+              )}
               <button
                 className="history-edit-button"
                 onClick={() => onEditBiometry(row.id)}
@@ -1144,79 +1107,17 @@ function HistorySection({
 function ChangeSummary({ pond }: { pond: Pond }) {
   const history = calculateHistory(pond)
   if (history.length < 2) return null
-
-  const previous = history[history.length - 2]
-  const latest = history[history.length - 1]
-  const delta = compareBiometriesForDisplay(previous, latest)
-  const previousTechnical = technicalMetricsStatus(pond, previous)
-  const latestTechnical = technicalMetricsStatus(pond, latest)
-
-  const changes = [
-    {
-      label: 'Peso médio',
-      value: formatSigned(delta.weightG, 1) + ' g',
-      sentence: movementWord(delta.weightG),
-      arrow: movementArrow(delta.weightG),
-    },
-    ...(previousTechnical.isPlausible && latestTechnical.isPlausible
-      ? [
-          {
-            label: 'Biomassa estimada',
-            value: formatSigned(delta.biomassKg) + ' kg',
-            sentence: movementWord(delta.biomassKg),
-            arrow: movementArrow(delta.biomassKg),
-          },
-          {
-            label: 'Sobrevivência estimada',
-            value: formatSigned(delta.survivalPercentagePoints) + ' p.p.',
-            sentence: movementWord(delta.survivalPercentagePoints),
-            arrow: movementArrow(delta.survivalPercentagePoints),
-          },
-          {
-            label: 'FCA',
-            value: formatSigned(delta.fca, 2),
-            sentence: movementWord(delta.fca),
-            arrow: movementArrow(delta.fca),
-          },
-        ]
-      : []),
-  ]
-
+  const delta = compareBiometriesForDisplay(history[history.length - 2], history[history.length - 1])
   return (
-    <article className="change-card">
-      <div className="change-card-head">
-        <div>
-          <span className="eyebrow">Comparação simples</span>
-          <h2>O que mudou desde a biometria anterior?</h2>
-          <p>
-            {formatDate(previous.date)} → {formatDate(latest.date)}
-          </p>
-        </div>
-      </div>
-
-      <div className="change-grid">
-        {changes.map((item) => (
-          <div className="change-item" key={item.label}>
-            <span className="change-arrow" aria-hidden="true">{item.arrow}</span>
-            <div>
-              <small>{item.label}</small>
-              <strong>{item.value}</strong>
-              <span>{item.sentence}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <p className="change-footnote">
-        A comparação usa apenas indicadores disponíveis e consistentes. Se faltar taxa válida, o app compara somente o peso.
-      </p>
-    </article>
+    <p className="weight-change-inline">
+      Crescimento desde a anterior: <strong>{formatSigned(delta.weightG, 2)} g</strong>
+    </p>
   )
 }
 
-function Metric({ label, value, featured = false }: { label: string; value: string; featured?: boolean }) {
+function Metric({ label, value, featured = false, caution = false }: { label: string; value: string; featured?: boolean; caution?: boolean }) {
   return (
-    <div className={featured ? 'metric featured' : 'metric'}>
+    <div className={['metric', featured ? 'featured' : '', caution ? 'metric-caution' : ''].filter(Boolean).join(' ')}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -1858,24 +1759,26 @@ function SimpleBiometryForm({
               <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
             </div>
 
-            {previewTechnical?.isPlausible && (
+            {previewTechnical?.hasCalculatedValues && (
               <details className="biometry-extra-metrics">
-                <summary>Ver estimativas técnicas</summary>
+                <summary>{previewTechnical.isPlausible ? 'Ver estimativas técnicas' : 'Ver cálculos condicionais ⚠'}</summary>
                 <div className="preview-grid">
                   <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
                   <Metric label="FCA est." value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
                   <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
                 </div>
-                <small>Estimativas calculadas com a taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
+                <small>{previewTechnical.isPlausible ? 'Estimativa' : 'Cenário não validado'} com taxa de {formatNumber(preview.feedRatePercent, 1)}%.</small>
               </details>
             )}
 
-            {!previewTechnical?.hasFeedRate && (
-              <p className="technical-inline-note">Sem taxa de alimentação: estimativas ocultas.</p>
+            {!previewTechnical?.hasCalculatedValues && (
+              <p className="technical-inline-note">
+                {!previewTechnical?.hasFeedRate ? 'Falta taxa de alimentação.' : 'Sem ração no dia para estimar.'}
+              </p>
             )}
 
-            {previewTechnical?.hasFeedRate && !previewTechnical.isPlausible && (
+            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
               <TechnicalInconsistencyNote
                 status={previewTechnical}
                 dailyFeedKg={preview.dailyFeedKg}
