@@ -182,6 +182,7 @@ export function technicalMetricsStatus(
   if (input.feedRatePercent <= 0) {
     return {
       hasFeedRate: false,
+      hasCalculatedValues: false,
       isPlausible: false,
       maximumBiomassKg,
       biomassKg: null,
@@ -197,15 +198,22 @@ export function technicalMetricsStatus(
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
   const fca = biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : 0
   const tolerance = 0.000001
-  // Zero de ração no dia não significa zero de animais ou de biomassa.
-  const isPlausible =
+  // Um cálculo pode existir matematicamente, mesmo sem validar a hipótese de taxa.
+  // Separar disponibilidade de plausibilidade evita deixar o painel sem informação.
+  const hasCalculatedValues =
     input.dailyFeedKg > 0 &&
     maximumBiomassKg > 0 &&
+    Number.isFinite(biomassKg) &&
+    Number.isFinite(survivalPercent) &&
+    Number.isFinite(fca)
+  const isPlausible =
+    hasCalculatedValues &&
     biomassKg <= maximumBiomassKg + tolerance &&
     survivalPercent <= 100 + tolerance
 
   return {
     hasFeedRate: true,
+    hasCalculatedValues,
     isPlausible,
     maximumBiomassKg,
     biomassKg,
@@ -261,7 +269,8 @@ export function compareBiometriesForDisplay(
   current: CalculatedBiometry,
 ) {
   return {
-    weightG: round(current.currentWeightG, 1) - round(previous.currentWeightG, 1),
+    // Arredonde só a diferença: 3,14 - 2,27 = 0,87, não 3,1 - 2,3 = 0,8.
+    weightG: round(current.currentWeightG - previous.currentWeightG, 2),
     biomassKg: round(current.biomassKg) - round(previous.biomassKg),
     survivalPercentagePoints:
       round(current.survivalPercent) - round(previous.survivalPercent),
