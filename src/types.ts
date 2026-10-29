@@ -24,6 +24,17 @@ export type ProductUsage = {
   note?: string
 }
 
+export type PopulationMovement = {
+  transferId: string
+  date: string
+  direction: 'in' | 'out'
+  animals: number
+  averageWeightG: number
+  biomassKg: number
+  counterpartPondId: string
+  counterpartPondName: string
+}
+
 export type Pond = {
   dataVersion?: number
   id: string
@@ -40,6 +51,7 @@ export type Pond = {
   plannedBiometries?: PlannedBiometry[]
   biometries: BiometryInput[]
   productUsages?: ProductUsage[]
+  populationMovements?: PopulationMovement[]
 }
 
 export type CalculatedBiometry = BiometryInput & {
@@ -51,4 +63,5 @@ export type CalculatedBiometry = BiometryInput & {
   survivalPercent: number
   biomassKg: number
   fca: number
+  populationAtDate: number
 }
