@@ -2667,6 +2667,25 @@ body {
   color: var(--accent-teal);
 }
 
+.metric-section-label {
+  font-size: .88rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.metric-section-label.calculated-label + .metric-grid .metric {
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  padding: 7px 12px;
+}
+
+.metric-section-label.calculated-label + .metric-grid .metric.featured {
+  border-left-color: var(--primary);
+}
+
 /* Next action card & planned highlight */
 .next-action-card,
 .scheduled-highlight,
@@ -3719,4 +3738,56 @@ body {
   .history-values small {
     font-size: .65rem;
   }
+}
+
+/* Transferências: um resumo operacional, sem mais uma grade de cartões decorativos. */
+.transfer-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1.2fr;
+  gap: 12px;
+  align-items: end;
+}
+.transfer-route > span:first-child,
+.transfer-route > .field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.transfer-route > span:first-child small {
+  color: var(--muted);
+  font-size: .8rem;
+}
+.transfer-route > span:first-child strong { font-size: 1.2rem; }
+.transfer-route > span:nth-child(2) { padding: 0 0 14px; color: var(--primary); }
+.transfer-preview {
+  display: grid;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.transfer-preview strong { color: var(--primary); font-size: 1.15rem; }
+.transfer-preview span, .transfer-preview small { color: var(--muted); line-height: 1.45; }
+.warning-note {
+  padding: 14px 16px;
+  color: #f2d7a2;
+  background: #29261c;
+  border-left: 3px solid #d6a84f;
+}
+.movement-list { display: grid; gap: 0; }
+.movement-row { display: grid; gap: 5px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.movement-row:last-child { border-bottom: 0; }
+.movement-row span { color: var(--muted); font-size: .88rem; }
+.field select {
+  width: 100%;
+  min-height: 54px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+@media (max-width: 480px) {
+  .transfer-route { grid-template-columns: 1fr; gap: 8px; }
+  .transfer-route > span:nth-child(2) { display: none; }
 }

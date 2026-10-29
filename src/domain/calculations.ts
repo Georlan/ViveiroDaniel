@@ -173,11 +173,21 @@ export function theoreticalBiomassAt100Kg(
   return (pond.initialPopulation * currentWeightG) / 1000
 }
 
+export function populationAtDate(pond: Pick<Pond, 'initialPopulation' | 'populationMovements'>, date: string) {
+  return (pond.populationMovements ?? []).reduce((population, movement) => {
+    if (movement.date > date) return population
+    return population + (movement.direction === 'in' ? movement.animals : -movement.animals)
+  }, pond.initialPopulation)
+}
+
 export function technicalMetricsStatus(
   pond: Pick<Pond, 'initialPopulation'>,
-  input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'>,
+  input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'> & { populationAtDate?: number },
 ) {
-  const maximumBiomassKg = theoreticalBiomassAt100Kg(pond, input.currentWeightG)
+  const population = typeof input.populationAtDate === 'number'
+    ? input.populationAtDate
+    : pond.initialPopulation
+  const maximumBiomassKg = theoreticalBiomassAt100Kg({ initialPopulation: population }, input.currentWeightG)
 
   if (input.feedRatePercent <= 0) {
     return {
@@ -224,14 +234,17 @@ export function technicalMetricsStatus(
 }
 
 export function calculateBiometry(
-  pond: Pick<Pond, 'initialPopulation' | 'stockingDate'>,
+  pond: Pick<Pond, 'initialPopulation' | 'stockingDate' | 'populationMovements'>,
   input: BiometryInput,
   previousWeightG: number | null,
 ): CalculatedBiometry {
   const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, input.date) + 1)
   const feedRate = input.feedRatePercent / 100
 
-  const theoreticalBiomassAt100 = theoreticalBiomassAt100Kg(pond, input.currentWeightG)
+  const populationAtMeasurement = populationAtDate(pond, input.date)
+  const theoreticalBiomassAt100 = theoreticalBiomassAt100Kg(
+    { initialPopulation: populationAtMeasurement }, input.currentWeightG,
+  )
   const feedFor100Kg = theoreticalBiomassAt100 * feedRate
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
   const biomassKg = feedRate > 0 ? input.dailyFeedKg / feedRate : 0
@@ -250,6 +263,7 @@ export function calculateBiometry(
     survivalPercent,
     biomassKg,
     fca,
+    populationAtDate: populationAtMeasurement,
   }
 }
 

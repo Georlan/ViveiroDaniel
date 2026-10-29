@@ -13,6 +13,7 @@ import {
   feedRateFromWeightTable,
   isCompleteSimpleBiometryDraft,
   technicalMetricsStatus,
+  populationAtDate,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
 import {
@@ -20,7 +21,7 @@ import {
   findRegisteredProduct,
   formatProductAmount,
 } from './domain/productUsage'
-import type { BiometryInput, Pond, ProductUsage } from './types'
+import type { BiometryInput, Pond, PopulationMovement, ProductUsage } from './types'
 import { describeRevision } from './domain/audit'
 import {
   buildShareUrl,
@@ -119,6 +120,7 @@ type Modal =
   | { kind: 'pond'; editId?: string }
   | { kind: 'biometry'; editId?: string }
   | { kind: 'products'; pondId?: string }
+  | { kind: 'transfer' }
   | null
 
 type SyncStatus = 'local' | 'connecting' | 'synced' | 'syncing' | 'error'
@@ -354,6 +356,21 @@ export default function App() {
     if (saved) setModal(null)
   }
 
+  async function saveTransfer(fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) {
+    const from = ponds.find((pond) => pond.id === fromId)
+    const to = ponds.find((pond) => pond.id === toId)
+    if (!from || !to) return
+    const out: PopulationMovement = { ...movement, direction: 'out', counterpartPondId: to.id, counterpartPondName: to.name }
+    const into: PopulationMovement = { ...movement, direction: 'in', counterpartPondId: from.id, counterpartPondName: from.name }
+    const next = ponds.map((pond) => pond.id === fromId
+      ? { ...pond, populationMovements: [...(pond.populationMovements ?? []), out] }
+      : pond.id === toId
+        ? { ...pond, populationMovements: [...(pond.populationMovements ?? []), into] }
+        : pond)
+    const saved = await persist(next)
+    if (saved) setModal(null)
+  }
+
   async function saveBiometry(input: BiometryInput) {
     if (!selected) return
 
@@ -479,6 +496,7 @@ export default function App() {
         {selected ? (
           <PondDetail
             pond={selected}
+            onTransfer={() => setModal({ kind: 'transfer' })}
             onAddBiometry={() => setModal({ kind: 'biometry' })}
             onEditBiometry={(id) => setModal({ kind: 'biometry', editId: id })}
             onEditPond={() => setModal({ kind: 'pond', editId: selected.id })}
@@ -516,6 +534,9 @@ export default function App() {
           onClose={() => setModal(null)}
           onSave={saveProductUsage}
         />
+      )}
+      {modal?.kind === 'transfer' && selected && (
+        <TransferForm ponds={ponds} source={selected} onClose={() => setModal(null)} onSave={saveTransfer} />
       )}
       {modal?.kind === 'biometry' && selected && (
         <BiometryForm
@@ -755,6 +776,7 @@ function calculatedMetric(
   kind: 'biomassKg' | 'survivalPercent' | 'fca',
 ) {
   if (!status?.hasCalculatedValues) return 'Sem base'
+  if (!status.isPlausible) return 'Revisar estimativa'
   const value = status[kind]
   if (value === null || !Number.isFinite(value)) return 'Sem base'
   return kind === 'biomassKg'
@@ -785,7 +807,7 @@ function PondCard({
           <div>
             <span className="pond-name">{pond.name}</span>
             <span className="pond-meta">
-              {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory}
+              {formatNumber(pond.areaHa, 2)} ha · {formatNumber(populationAtDate(pond, localToday()))} animais · {pond.laboratory}
             </span>
           </div>
           <span className={latest ? 'status ready' : 'status waiting'}>
@@ -834,12 +856,14 @@ function PondCard({
 
 function PondDetail({
   pond,
+  onTransfer,
   onAddBiometry,
   onEditBiometry,
   onEditPond,
   onProducts,
 }: {
   pond: Pond
+  onTransfer: () => void
   onAddBiometry: () => void
   onEditBiometry: (id: string) => void
   onEditPond: () => void
@@ -869,7 +893,7 @@ function PondDetail({
           </span>
         </div>
         <p className="pond-header-meta">
-          {formatNumber(pond.areaHa, 2)} ha · {formatNumber(pond.initialPopulation)} animais · {pond.laboratory || '—'}
+          {formatNumber(pond.areaHa, 2)} ha · {formatNumber(populationAtDate(pond, today))} animais no controle · {pond.laboratory || '—'}
         </p>
         <div className="pond-header-badges">
           <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
@@ -882,6 +906,9 @@ function PondDetail({
           <span className="button-icon">＋</span> Registrar biometria
         </button>
         <div className="operational-secondary-grid">
+          <button className="secondary-button" onClick={onTransfer}>
+            <span className="button-icon">⇄</span> Transferir camarões
+          </button>
           <button className="secondary-button" onClick={onProducts}>
             <span className="button-icon">＋</span> Registrar uso de produto
           </button>
@@ -934,7 +961,7 @@ function PondDetail({
                 <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
               </>
             )}
-            {latestTechnical?.hasCalculatedValues && (
+            {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && (
               <>
                 <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} featured />
                 <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
@@ -947,6 +974,11 @@ function PondDetail({
           {!latestTechnical?.hasCalculatedValues && (
             <p className="technical-inline-note">
               {!latestTechnical?.hasFeedRate ? 'Sem taxa informada para estimar.' : 'Sem ração do dia para estimar.'}
+            </p>
+          )}
+          {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
+            <p className="technical-inline-note warning-note">
+              Os dados não fecham nesta hipótese: a ração informada passa {formatNumber(Math.max(0, (latest.dailyFeedKg - (latestTechnical.feedFor100Kg ?? 0))), 2)} kg/dia da referência para 100%. Confira a taxa e a ração; biomassa, sobrevivência e FCA não são exibidas como válidas.
             </p>
           )}
 
@@ -966,6 +998,20 @@ function PondDetail({
       )}
 
       <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
+
+      {(pond.populationMovements ?? []).length > 0 && (
+        <details className="pond-extra-details movement-history">
+          <summary>Transferências <span>{(pond.populationMovements ?? []).length} registros</span></summary>
+          <div className="movement-list">
+            {[...(pond.populationMovements ?? [])].sort((a, b) => b.date.localeCompare(a.date)).map((movement) => (
+              <div className="movement-row" key={movement.transferId}>
+                <strong>{movement.direction === 'out' ? 'Saída' : 'Entrada'} · {formatNumber(movement.animals)} animais</strong>
+                <span>{formatDate(movement.date)} · {movement.counterpartPondName} · {formatNumber(movement.biomassKg, 2)} kg estimados</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="product-summary-card">
         <div>
@@ -1087,6 +1133,95 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
+function TransferForm({
+  ponds,
+  source,
+  onClose,
+  onSave,
+}: {
+  ponds: Pond[]
+  source: Pond
+  onClose: () => void
+  onSave: (fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) => void
+}) {
+  const targets = ponds.filter((pond) => pond.id !== source.id)
+  const sourceHistory = calculateHistory(source)
+  const latest = sourceHistory[sourceHistory.length - 1]
+  const [targetId, setTargetId] = useState(targets[0]?.id ?? '')
+  const [date, setDate] = useState(localToday())
+  const [animals, setAnimals] = useState('')
+  const [weight, setWeight] = useState(latest ? String(round(latest.currentWeightG, 2)) : '')
+  const [error, setError] = useState('')
+  const target = targets.find((pond) => pond.id === targetId)
+  const firstEligibleDate = target && target.stockingDate > source.stockingDate ? target.stockingDate : source.stockingDate
+  const sourcePopulation = populationAtDate(source, date)
+  const targetPopulation = target ? populationAtDate(target, date) : 0
+  const count = Number(animals)
+  const averageWeightG = Number(weight.replace(',', '.'))
+  const biomassKg = count * averageWeightG / 1_000_000
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    if (!target) return setError('Cadastre outro viveiro antes de transferir.')
+    if (date < firstEligibleDate || date > localToday()) return setError('Use uma data entre o povoamento dos dois viveiros e hoje.')
+    if (!Number.isInteger(count) || count <= 0) return setError('Informe a quantidade inteira de camarões.')
+    if (count > sourcePopulation) return setError('A quantidade excede a população registrada no viveiro de origem.')
+    if (!Number.isFinite(averageWeightG) || averageWeightG <= 0) return setError('Informe o peso médio atual do lote transferido.')
+    onSave(source.id, target.id, {
+      transferId: id('transfer'), date, animals: count, averageWeightG,
+      biomassKg: round(biomassKg, 3),
+    })
+  }
+
+  return (
+    <ModalShell title="Transferir camarões" subtitle="Registre a saída e a entrada no mesmo movimento." onClose={onClose}>
+      {targets.length === 0 ? (
+        <div className="empty-card">
+          <h2>Falta o viveiro de destino</h2>
+          <p>Cadastre outro viveiro para registrar a transferência.</p>
+          <button type="button" className="secondary-button" onClick={onClose}>Fechar</button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="form-grid">
+          <div className="transfer-route">
+            <span><small>Origem</small><strong>{source.name}</strong></span>
+            <span aria-hidden="true">→</span>
+            <Field label="Destino" required>
+              <select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+                {targets.map((pond) => <option value={pond.id} key={pond.id}>{pond.name}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Data da transferência" required>
+            <input required type="date" min={firstEligibleDate} max={localToday()} value={date} onChange={(event) => setDate(event.target.value)} />
+          </Field>
+          <Field label="Quantidade de camarões" required>
+            <input required type="number" min="1" step="1" inputMode="numeric" value={animals} onChange={(event) => setAnimals(event.target.value)} />
+            <small>Disponíveis no controle de {source.name}: {formatNumber(sourcePopulation)}</small>
+          </Field>
+          <Field label="Peso médio transferido (g)" required>
+            <input required type="number" min="0.01" step="any" inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} />
+            <small>Pré-preenchido pela última biometria de {source.name}; ajuste se o lote transferido tiver outro peso.</small>
+          </Field>
+          {count > 0 && target && Number.isFinite(averageWeightG) && averageWeightG > 0 && (
+            <div className="transfer-preview">
+              <strong>{formatNumber(biomassKg, 3)} kg de biomassa estimada</strong>
+              <span>{formatNumber(sourcePopulation - count)} animais ficam em {source.name} · {formatNumber(targetPopulation + count)} passam ao controle de {target.name}</span>
+              <small>Estimativa calculada pela quantidade × peso médio. O peso do destino será confirmado na próxima biometria.</small>
+            </div>
+          )}
+          {error && <div className="form-error" role="alert">{error}</div>}
+          <div className="modal-actions">
+            <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
+            <button className="primary-button" type="submit">Registrar transferência</button>
+          </div>
+        </form>
+      )}
+    </ModalShell>
+  )
+}
+
 function PondForm({
   initial,
   onClose,
@@ -1159,7 +1294,7 @@ function PondForm({
         </div>
         <div className="two-cols">
           <Field label="Ciclo" required><input required type="number" min="1" inputMode="numeric" value={form.cycle} onChange={(e) => setForm({ ...form, cycle: e.target.value })} /></Field>
-          <Field label="PL/g"><input type="number" min="0" inputMode="numeric" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
+          <Field label="PL/g"><input type="number" min="0" step="any" inputMode="decimal" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
         <div className="modal-actions">
           <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
@@ -1713,7 +1848,7 @@ function SimpleBiometryForm({
               <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
             </div>
 
-            {previewTechnical?.hasCalculatedValues && (
+            {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
               <details className="biometry-extra-metrics">
                 <summary>Ver estimativas técnicas</summary>
                 <div className="preview-grid">
@@ -1729,6 +1864,11 @@ function SimpleBiometryForm({
             {!previewTechnical?.hasCalculatedValues && (
               <p className="technical-inline-note">
                 {!previewTechnical?.hasFeedRate ? 'Falta taxa de alimentação.' : 'Sem ração no dia para estimar.'}
+              </p>
+            )}
+            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+              <p className="technical-inline-note warning-note">
+                A ração informada excede em {formatNumber(Math.max(0, preview.dailyFeedKg - (previewTechnical.feedFor100Kg ?? 0)), 2)} kg/dia a referência para 100%. Confira os dados; as estimativas foram ocultadas.
               </p>
             )}
 
@@ -1910,7 +2050,7 @@ function LegacyBiometryEditForm({
             <span className="eyebrow">Resultado após a correção</span>
             <div className="preview-grid">
               <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
-              {previewTechnical?.hasCalculatedValues && (
+              {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
                 <>
                   <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
