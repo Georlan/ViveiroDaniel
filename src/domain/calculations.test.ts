@@ -7,6 +7,8 @@ import {
   densityPerSquareMeter,
   feedRateFromWeightTable,
   isCompleteSimpleBiometryDraft,
+  isFeedPeriodInconsistent,
+  manualFeedRateForEdit,
   normalizeBiometryInputs,
   preparationDays,
   round,
@@ -84,6 +86,27 @@ describe('pond calculations', () => {
     expect(isCompleteSimpleBiometryDraft({ ...draft, sampleTotalWeightG: '0' })).toBe(false)
     expect(isCompleteSimpleBiometryDraft({ ...draft, dailyFeedKg: '-1' })).toBe(false)
     expect(isCompleteSimpleBiometryDraft({ ...draft, dailyFeedKg: '0' })).toBe(true)
+  })
+
+  it('catches inverted feed values without silently modifying recorded data', () => {
+    expect(isFeedPeriodInconsistent(152, 25)).toBe(true)
+    expect(isFeedPeriodInconsistent(25, 152)).toBe(false)
+    expect(isFeedPeriodInconsistent(0, 0)).toBe(false)
+    expect(isFeedPeriodInconsistent(10, 10)).toBe(false)
+  })
+
+  it('recalculates a table rate after sample correction, but preserves manual rates', () => {
+    const base: BiometryInput = {
+      id: 'sample', date: '2026-10-28',
+      currentWeightG: 328 / 70, sampleTotalWeightG: 328, sampleCount: 70,
+      feedRatePercent: 3.6, dailyFeedKg: 25, periodFeedKg: 152, accumulatedFeedKg: 407,
+    }
+
+    expect(manualFeedRateForEdit({ ...base, feedRateSource: 'table' })).toBe('')
+    expect(manualFeedRateForEdit(base)).toBe('') // retrocompatibilidade
+    expect(manualFeedRateForEdit({ ...base, feedRateSource: 'manual' })).toBe('3.6')
+    expect(manualFeedRateForEdit({ ...base, feedRatePercent: 4.5 })).toBe('4.5')
+    expect(manualFeedRateForEdit({ ...base, sampleTotalWeightG: 280, sampleCount: 70, feedRatePercent: 4.1 })).toBe('')
   })
 
   it('does not infer a zero population when no feed was given on that day', () => {
