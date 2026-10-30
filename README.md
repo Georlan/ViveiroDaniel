@@ -14,6 +14,8 @@ Nos novos registros o modo simples pede:
 - ração usada por dia no momento da biometria;
 - ração fornecida desde a biometria anterior, ou desde o povoamento na primeira biometria.
 
+O total do período **inclui o dia da biometria**. Se ficar menor que a ração de um único dia, o formulário avisa e não salva a contradição; há um botão para trocar os dois campos **somente após ação explícita** do operador. Registros antigos não são alterados automaticamente. Quando o peso é corrigido, a taxa automática segue a tabela; uma taxa informada manualmente é preservada.
+
 O aplicativo calcula automaticamente:
 
 - peso médio = peso da amostra / quantidade;
