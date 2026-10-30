@@ -5,6 +5,8 @@ import {
   calculateHistory,
   compareBiometriesForDisplay,
   densityPerSquareMeter,
+  hectaresFromSquareMeters,
+  squareMetersFromHectares,
   feedRateFromWeightTable,
   isCompleteSimpleBiometryDraft,
   isFeedPeriodInconsistent,
@@ -60,6 +62,16 @@ describe('pond calculations', () => {
   it('calculates current static pond facts from the configured data', () => {
     expect(densityPerSquareMeter(v01)).toBe(44)
     expect(preparationDays(v01)).toBe(16)
+  })
+
+  it('uses animals per square meter as density while preserving hectares in storage', () => {
+    expect(squareMetersFromHectares(v01.areaHa)).toBe(5000)
+    expect(hectaresFromSquareMeters(5000)).toBe(0.5)
+    expect(densityPerSquareMeter(v01)).toBe(44)
+    // Após uma transferência, a densidade cadastrada considera o saldo atual.
+    expect(densityPerSquareMeter(v01, 180_000)).toBe(36)
+    expect(densityPerSquareMeter({ ...v01, areaHa: 0 })).toBe(0)
+    expect(hectaresFromSquareMeters(squareMetersFromHectares(0.275))).toBeCloseTo(0.275)
   })
 
   it('reconstructs the simple manual workflow from a formula fixture', () => {
