@@ -11,9 +11,25 @@ export function daysBetween(start: string, end: string) {
   return Math.round((utcDay(end) - utcDay(start)) / DAY_MS)
 }
 
-export function densityPerSquareMeter(pond: Pick<Pond, 'areaHa' | 'initialPopulation'>) {
-  if (pond.areaHa <= 0) return 0
-  return pond.initialPopulation / (pond.areaHa * 10_000)
+const SQUARE_METERS_PER_HECTARE = 10_000
+
+export function squareMetersFromHectares(areaHa: number) {
+  return areaHa * SQUARE_METERS_PER_HECTARE
+}
+
+export function hectaresFromSquareMeters(areaM2: number) {
+  return areaM2 / SQUARE_METERS_PER_HECTARE
+}
+
+// A densidade é a população registrada dividida pela área do viveiro.
+// Pode ser calculada para a população inicial ou para o saldo após transferências.
+// Não representa uma contagem dos animais vivos.
+export function densityPerSquareMeter(
+  pond: Pick<Pond, 'areaHa' | 'initialPopulation'>,
+  population = pond.initialPopulation,
+) {
+  if (pond.areaHa <= 0 || population < 0 || !Number.isFinite(population)) return 0
+  return population / squareMetersFromHectares(pond.areaHa)
 }
 
 export function preparationDays(pond: Pick<Pond, 'cycleStartDate' | 'stockingDate'>) {

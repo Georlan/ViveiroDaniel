@@ -3885,3 +3885,62 @@ body {
     grid-column: 1 / -1;
   }
 }
+
+/* Prioridade zootécnica: densidade cadastrada em animais por m².
+   Hectares permanecem somente como unidade técnica de persistência. */
+.pond-card-head > div:first-child {
+  min-width: 0;
+}
+.pond-density-primary {
+  display: grid;
+  gap: 3px;
+  margin-top: 11px;
+}
+.pond-density-primary > span,
+.pond-density-hero > span,
+.pond-form-density-preview > span {
+  color: var(--text-muted);
+  font-size: .8rem;
+  font-weight: 650;
+}
+.pond-density-primary > strong {
+  color: var(--accent-teal);
+  font-size: clamp(1.25rem, 5vw, 1.62rem);
+  font-weight: 850;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.pond-header-card .pond-density-hero {
+  display: grid;
+  gap: 4px;
+  margin-top: 18px;
+}
+.pond-density-hero > strong {
+  color: var(--accent-teal);
+  font-size: clamp(1.7rem, 7vw, 2.25rem);
+  font-weight: 850;
+  letter-spacing: -.03em;
+  line-height: 1.15;
+}
+.pond-density-hero > small {
+  color: var(--text-muted);
+  font-size: .74rem;
+  line-height: 1.4;
+}
+.pond-form-density-preview {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border-left: 3px solid var(--accent-teal);
+  background: var(--surface-raised);
+}
+.pond-form-density-preview strong {
+  color: var(--accent-teal);
+  font-size: 1.28rem;
+  line-height: 1.25;
+}
+.pond-form-density-preview small {
+  color: var(--text-muted);
+  font-size: .75rem;
+  line-height: 1.45;
+}
