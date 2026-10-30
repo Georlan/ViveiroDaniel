@@ -8,6 +8,8 @@ export type BiometryInput = {
   sampleTotalWeightG?: number | null
   sampleCount?: number | null
   periodFeedKg?: number | null
+  /** Origem da taxa aplicada; registros antigos podem não informar a origem. */
+  feedRateSource?: 'table' | 'manual'
 }
 
 export type PlannedBiometry = {

@@ -66,6 +66,18 @@ export function isCompleteSimpleBiometryDraft(draft: {
   )
 }
 
+// O total acumulado no intervalo inclui o dia da biometria. Por definição,
+ // a soma de vários dias não pode ser menor que o consumo do dia informado.
+export function isFeedPeriodInconsistent(dailyFeedKg: number, periodFeedKg: number) {
+  return (
+    Number.isFinite(dailyFeedKg) &&
+    Number.isFinite(periodFeedKg) &&
+    dailyFeedKg > 0 &&
+    periodFeedKg >= 0 &&
+    periodFeedKg + 1e-9 < dailyFeedKg
+  )
+}
+
 export function accumulatedFeedFromPeriod(previousAccumulatedKg: number, periodFeedKg: number) {
   return Math.max(0, previousAccumulatedKg) + Math.max(0, periodFeedKg)
 }
@@ -132,6 +144,22 @@ export function suggestFeedRatePercent(
     const itemDistance = Math.abs(item.currentWeightG - currentWeightG)
     return itemDistance < nearestDistance ? item : nearest
   }).feedRatePercent
+}
+
+// Nos registros antigos não existia campo de origem: preserve ajustes
+// diferentes da referência, mas não congele a taxa automática ao editar o peso.
+export function manualFeedRateForEdit(initial?: BiometryInput) {
+  if (!initial || initial.feedRatePercent <= 0) return ''
+  if (initial.feedRateSource === 'table') return ''
+  if (initial.feedRateSource === 'manual') return String(initial.feedRatePercent)
+
+  const weight = initial.sampleTotalWeightG != null && initial.sampleCount != null
+    ? averageWeightFromSample(initial.sampleTotalWeightG, initial.sampleCount)
+    : initial.currentWeightG
+  const reference = feedRateFromWeightTable(weight)
+  return reference && Math.abs(reference.ratePercent - initial.feedRatePercent) < 1e-9
+    ? ''
+    : String(initial.feedRatePercent)
 }
 
 export function normalizeBiometryInputs(biometries: BiometryInput[]) {
