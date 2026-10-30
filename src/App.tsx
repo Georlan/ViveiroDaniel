@@ -7,6 +7,8 @@ import {
   compareBiometriesForDisplay,
   daysBetween,
   densityPerSquareMeter,
+  hectaresFromSquareMeters,
+  squareMetersFromHectares,
   normalizeBiometryInputs,
   preparationDays,
   round,
@@ -92,6 +94,11 @@ function formatNumber(value: number, decimals = 0) {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value)
+}
+
+function formatAreaSquareMeters(areaHa: number) {
+  const squareMeters = round(squareMetersFromHectares(areaHa), 2)
+  return formatNumber(squareMeters, Number.isInteger(squareMeters) ? 0 : 2)
 }
 
 function formatProductUsageAmount(baseQuantity: number, dimension: 'mass' | 'volume') {
@@ -801,6 +808,7 @@ function PondCard({
   const previous = history.length > 1 ? history[history.length - 2] : null
   const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
+  const populationInControl = populationAtDate(pond, localToday())
 
   return (
     <article className="pond-card actionable">
@@ -808,8 +816,12 @@ function PondCard({
         <div className="pond-card-head">
           <div>
             <span className="pond-name">{pond.name}</span>
+            <div className="pond-density-primary">
+              <span>Densidade no controle</span>
+              <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} animais/m²</strong>
+            </div>
             <span className="pond-meta">
-              {formatNumber(pond.areaHa, 2)} ha · {formatNumber(populationAtDate(pond, localToday()))} animais · {pond.laboratory}
+              {formatAreaSquareMeters(pond.areaHa)} m² de área · {formatNumber(populationInControl)} animais · {pond.laboratory}
             </span>
           </div>
           <span className={latest ? 'status ready' : 'status waiting'}>
@@ -887,6 +899,7 @@ function PondDetail({
   const today = localToday()
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
   const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
+  const populationInControl = populationAtDate(pond, today)
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
   const latestFeedMismatch = latest?.periodFeedKg != null &&
     isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)
@@ -907,12 +920,16 @@ function PondDetail({
             {latest ? 'Com biometria' : 'Sem biometria'}
           </span>
         </div>
+        <div className="pond-density-hero">
+          <span>Densidade no controle</span>
+          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} animais/m²</strong>
+          <small>População registrada ÷ área do viveiro</small>
+        </div>
         <p className="pond-header-meta">
-          {formatNumber(pond.areaHa, 2)} ha · {formatNumber(populationAtDate(pond, today))} animais no controle · {pond.laboratory || '—'}
+          {formatAreaSquareMeters(pond.areaHa)} m² de área · {formatNumber(populationInControl)} animais no controle · {pond.laboratory || '—'}
         </p>
         <div className="pond-header-badges">
           <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
-          <span className="info-chip highlight">{formatNumber(round(densityPerSquareMeter(pond), 1), 1)} animais/m²</span>
         </div>
       </div>
 
@@ -1066,8 +1083,10 @@ function PondDetail({
       <details className="pond-extra-details">
         <summary>Dados do viveiro <span>Ver cadastro</span></summary>
         <div className="facts-grid">
-        <Fact label="Área" value={formatNumber(pond.areaHa, 2) + ' ha'} />
+        <Fact label="Densidade no controle" value={formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1) + ' animais/m²'} />
+        <Fact label="Área" value={formatAreaSquareMeters(pond.areaHa) + ' m²'} />
         <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
+        <Fact label="Área equivalente" value={formatNumber(pond.areaHa, 2) + ' ha'} />
         <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
         <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
         <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
@@ -1285,7 +1304,7 @@ function PondForm({
 }) {
   const [form, setForm] = useState({
     name: initial?.name ?? '',
-    areaHa: initial ? String(initial.areaHa) : '',
+    areaSquareMeters: initial ? String(squareMetersFromHectares(initial.areaHa)) : '',
     initialPopulation: initial ? String(initial.initialPopulation) : '',
     laboratory: initial?.laboratory ?? '',
     stockingDate: initial?.stockingDate ?? '',
@@ -1294,6 +1313,14 @@ function PondForm({
     feeder: initial?.feeder ?? '',
     plPerGram: initial?.plPerGram != null ? String(initial.plPerGram) : '',
   })
+
+  const areaM2 = Number(form.areaSquareMeters)
+  const initialAnimals = Number(form.initialPopulation)
+  const draftDensity = form.areaSquareMeters.trim() && form.initialPopulation.trim() &&
+    Number.isFinite(areaM2) && areaM2 > 0 &&
+    Number.isFinite(initialAnimals) && initialAnimals > 0
+      ? initialAnimals / areaM2
+      : null
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -1306,8 +1333,8 @@ function PondForm({
         biometries: [],
       }),
       name: form.name.trim(),
-      areaHa: Number(form.areaHa),
-      initialPopulation: Number(form.initialPopulation),
+      areaHa: hectaresFromSquareMeters(areaM2),
+      initialPopulation: initialAnimals,
       laboratory: form.laboratory.trim(),
       stockingDate: form.stockingDate,
       cycleStartDate: form.cycleStartDate,
@@ -1336,9 +1363,16 @@ function PondForm({
         )}
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
-          <Field label="Área (ha)" required><input required type="number" min="0.01" step="0.01" inputMode="decimal" value={form.areaHa} onChange={(e) => setForm({ ...form, areaHa: e.target.value })} /></Field>
-          <Field label="População inicial" required><input required type="number" min="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} /></Field>
+          <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
+          <Field label="População inicial" required><input required type="number" min="1" step="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} /></Field>
         </div>
+        {draftDensity !== null && (
+          <div className="pond-form-density-preview" role="status">
+            <span>Densidade inicial cadastrada</span>
+            <strong>{formatNumber(round(draftDensity, 1), 1)} animais/m²</strong>
+            <small>Calculada pela população inicial e pela área informada; não indica sobrevivência real.</small>
+          </div>
+        )}
         <Field label="Laboratório" required><input required value={form.laboratory} onChange={(e) => setForm({ ...form, laboratory: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Povoamento" required><input required type="date" value={form.stockingDate} onChange={(e) => setForm({ ...form, stockingDate: e.target.value })} /></Field>
