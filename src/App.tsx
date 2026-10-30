@@ -12,6 +12,8 @@ import {
   round,
   feedRateFromWeightTable,
   isCompleteSimpleBiometryDraft,
+  isFeedPeriodInconsistent,
+  manualFeedRateForEdit,
   technicalMetricsStatus,
   populationAtDate,
 } from './domain/calculations'
@@ -875,6 +877,8 @@ function PondDetail({
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
   const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
+  const latestFeedMismatch = latest?.periodFeedKg != null &&
+    isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)
   const productCatalog = aggregateProductUsages(
     pond.productUsages ?? [],
     localToday().slice(0, 7),
@@ -976,10 +980,32 @@ function PondDetail({
               {!latestTechnical?.hasFeedRate ? 'Sem taxa informada para estimar.' : 'Sem ração do dia para estimar.'}
             </p>
           )}
-          {latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
-            <p className="technical-inline-note warning-note">
-              Os dados não fecham nesta hipótese: a ração informada passa {formatNumber(Math.max(0, (latest.dailyFeedKg - (latestTechnical.feedFor100Kg ?? 0))), 2)} kg/dia da referência para 100%. Confira a taxa e a ração; biomassa, sobrevivência e FCA não são exibidas como válidas.
-            </p>
+          {latestFeedMismatch && (
+            <div className="feed-integrity-callout" role="alert">
+              <strong>Verifique a ração informada</strong>
+              <p>
+                A ração do período ({formatNumber(latest.periodFeedKg ?? 0)} kg) está menor
+                que a ração de um só dia ({formatNumber(latest.dailyFeedKg)} kg).
+                Confira se os valores foram trocados ao registrar.
+              </p>
+              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>
+                Corrigir ração desta biometria
+              </button>
+            </div>
+          )}
+          {!latestFeedMismatch && latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
+            <div className="feed-integrity-callout" role="status">
+              <strong>Estimativas sob revisão</strong>
+              <p>
+                A ração de {formatNumber(latest.dailyFeedKg)} kg/dia supera em {formatNumber(Math.max(0, latest.dailyFeedKg - (latestTechnical.feedFor100Kg ?? 0)), 2)} kg/dia
+                a referência para 100%, calculada com taxa de {formatNumber(latest.feedRatePercent, 1)}%.
+                Confira a ração, a taxa de alimentação e a população cadastrada.
+                Biomassa, sobrevivência e FCA não são exibidas como válidas.
+              </p>
+              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>
+                Revisar biometria
+              </button>
+            </div>
           )}
 
 
@@ -1084,9 +1110,24 @@ function HistorySection({
               </div>
               <div className="history-values">
                 <span><small>Peso</small>{formatNumber(row.currentWeightG, 2)} g</span>
-                <span><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
-                <span><small>Sobrev. est.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
-                <span><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
+                {technical.hasCalculatedValues && technical.isPlausible ? (
+                  <>
+                    <span><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
+                    <span><small>Sobrev. est.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
+                    <span><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
+                  </>
+                ) : (
+                  <span className="history-review">
+                    <small>Biomassa · Sobrevivência · FCA</small>
+                    <strong>
+                      {row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)
+                        ? 'Conferir ração diária e do período'
+                        : technical.hasCalculatedValues
+                          ? 'Revisar ração e taxa'
+                          : 'Sem base para estimar'}
+                    </strong>
+                  </span>
+                )}
               </div>
               <button
                 className="history-edit-button"
@@ -1592,7 +1633,7 @@ function SimpleBiometryForm({
     sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
     dailyFeedKg: initial ? String(initial.dailyFeedKg) : '',
     periodFeedKg: initial?.periodFeedKg != null ? String(initial.periodFeedKg) : '',
-    feedRatePercent: initial && initial.feedRatePercent > 0 ? String(initial.feedRatePercent) : '',
+    feedRatePercent: manualFeedRateForEdit(initial),
   })
 
   const draftPrevious = [...historyWithoutInitial]
@@ -1621,6 +1662,7 @@ function SimpleBiometryForm({
           date: form.date,
           currentWeightG,
           feedRatePercent: effectiveRate,
+          feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
           dailyFeedKg: Number(form.dailyFeedKg),
           accumulatedFeedKg,
           sampleTotalWeightG,
@@ -1671,6 +1713,11 @@ function SimpleBiometryForm({
       return
     }
 
+    if (isFeedPeriodInconsistent(Number(form.dailyFeedKg), periodFeedKg)) {
+      setError('A ração do período não pode ser menor que a ração de um dia. Confira os valores ou use Trocar valores.')
+      return
+    }
+
     if (form.feedRatePercent.trim() && (!Number.isFinite(effectiveRate) || effectiveRate <= 0)) {
       setError('Se ajustar a taxa manualmente, use um valor maior que zero.')
       return
@@ -1682,6 +1729,7 @@ function SimpleBiometryForm({
       date: form.date,
       currentWeightG,
       feedRatePercent: effectiveRate,
+      feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
       dailyFeedKg: Number(form.dailyFeedKg),
       accumulatedFeedKg,
       sampleTotalWeightG,
@@ -1770,8 +1818,34 @@ function SimpleBiometryForm({
             value={form.periodFeedKg}
             onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
           />
-          <small>Soma de todos os dias deste intervalo.</small>
+          <small>Soma dos dias desde a última biometria, incluindo o dia deste registro.</small>
         </Field>
+
+        {form.dailyFeedKg.trim() && form.periodFeedKg.trim() &&
+          isFeedPeriodInconsistent(Number(form.dailyFeedKg), periodFeedKg) && (
+          <div className="feed-entry-review" role="alert">
+            <strong>Os valores de ração não fecham</strong>
+            <p>
+              Você informou {formatNumber(periodFeedKg)} kg para todo o período,
+              mas {formatNumber(Number(form.dailyFeedKg))} kg em um único dia.
+              Verifique se os campos foram invertidos.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setForm({
+                  ...form,
+                  dailyFeedKg: form.periodFeedKg,
+                  periodFeedKg: form.dailyFeedKg,
+                })
+                setError('')
+              }}
+            >
+              Trocar valores de ração
+            </button>
+          </div>
+        )}
 
         <details className="technical-adjustment" open={!tableRate}>
           <summary>
@@ -1868,7 +1942,8 @@ function SimpleBiometryForm({
             )}
             {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
               <p className="technical-inline-note warning-note">
-                A ração informada excede em {formatNumber(Math.max(0, preview.dailyFeedKg - (previewTechnical.feedFor100Kg ?? 0)), 2)} kg/dia a referência para 100%. Confira os dados; as estimativas foram ocultadas.
+                A ração de {formatNumber(preview.dailyFeedKg)} kg/dia supera a referência de {formatNumber(previewTechnical.feedFor100Kg ?? 0, 2)} kg/dia
+                na taxa de {formatNumber(preview.feedRatePercent, 1)}%. Confira a hipótese; as estimativas não são válidas.
               </p>
             )}
 
