@@ -59,6 +59,7 @@ Por exemplo:
 - V01 como viveiro ativo do MVP; V02 retirado do fluxo por enquanto.
 - Cadastro de viveiro.
 - Edição dos dados iniciais do viveiro, incluindo população inicial.
+- Densidade cadastrada de animais/m² como indicador principal (no resumo e no viveiro); área informada em m² no formulário, convertida internamente para hectares para preservar registros anteriores. O saldo de animais considera transferências registradas e não equivale a sobrevivência medida.
 - Registro de biometria em modo simples.
 - Cadastro de aplicações de produtos por data, quantidade e unidade, com resumo mensal.
 - Planejamento de biometria.
