@@ -829,9 +829,20 @@ function PondCard({
             </div>
             <div className="metric-grid compact">
               <Metric label="Peso" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
-              <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
-              <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
-              <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
+              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? (
+                <>
+                  <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
+                  <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
+                  <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
+                </>
+              ) : (
+                <div className="pond-technical-unavailable">
+                  <small>Biomassa · Sobrevivência · FCA</small>
+                  <strong>
+                    {latestTechnical?.hasCalculatedValues ? 'Revisar ração e taxa' : 'Sem base para estimar'}
+                  </strong>
+                </div>
+              )}
             </div>
             {lastChange && (
               <div className="card-change-summary">
