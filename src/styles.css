@@ -3791,3 +3791,68 @@ body {
   .transfer-route { grid-template-columns: 1fr; gap: 8px; }
   .transfer-route > span:nth-child(2) { display: none; }
 }
+
+/* Integridade da ração: alerta acionável, sem alterar registros automaticamente. */
+.feed-integrity-callout,
+.feed-entry-review {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid #795f36;
+  border-left: 3px solid #d6a84f;
+  border-radius: 12px;
+  background: #29261c;
+  color: #f2d7a2;
+}
+.feed-integrity-callout > strong,
+.feed-entry-review > strong {
+  display: block;
+  font-size: .94rem;
+  line-height: 1.35;
+}
+.feed-integrity-callout p,
+.feed-entry-review p {
+  margin: 7px 0 12px;
+  font-size: .84rem;
+  line-height: 1.5;
+}
+.feed-integrity-callout .secondary-button,
+.feed-entry-review .secondary-button {
+  min-height: 42px;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.history-values span.history-review {
+  grid-column: span 3;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.history-values .history-review strong {
+  display: block;
+  font-size: .83rem;
+  line-height: 1.35;
+  color: #f2d7a2;
+}
+@media (max-width: 640px) {
+  .history-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .history-values span {
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  .history-values span.history-review {
+    grid-column: 1 / -1;
+  }
+  .feed-integrity-callout .secondary-button,
+  .feed-entry-review .secondary-button {
+    width: 100%;
+  }
+}
