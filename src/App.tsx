@@ -42,6 +42,29 @@ import {
   type RemoteState,
 } from './sync'
 
+
+type UiIconName = 'back' | 'water' | 'biometry' | 'transfer' | 'product' | 'edit' | 'calendar' | 'warning'
+
+function UiIcon({ name }: { name: UiIconName }) {
+  const shapes: Record<UiIconName, React.ReactNode> = {
+    back: <><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></>,
+    water: <><path d="M2 8c3-3 5-3 8 0s5 3 8 0 3-3 4-3" /><path d="M2 16c3-3 5-3 8 0s5 3 8 0 3-3 4-3" /></>,
+    biometry: <><path d="M12 5v14M5 12h14" strokeWidth="2.4" /></>,
+    transfer: <><path d="M4 7h16m-5-4 5 4-5 4" /><path d="M20 17H4m5-4-5 4 5 4" /></>,
+    product: <><path d="M9 3h6M10 3v5l-5 9a3 3 0 0 0 3 4h8a3 3 0 0 0 3-4l-5-9V3" /><path d="M7 15h10" /></>,
+    edit: <><path d="M12 20h9" /><path d="m16.5 3.5 4 4L9 19l-5 1 1-5z" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /></>,
+    warning: <><path d="m12 3 9 16a1.5 1.5 0 0 1-1.3 2H4.3A1.5 1.5 0 0 1 3 19l9-16z" /><path d="M12 9v5m0 3h.01" /></>,
+  }
+
+  return (
+    <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {shapes[name]}
+    </svg>
+  )
+}
+
 const STORAGE_KEY = 'viveiro-daniel:v3'
 const LEGACY_STORAGE_KEYS = ['viveiro-daniel:v2', 'viveiro-daniel:v1']
 
@@ -484,8 +507,7 @@ export default function App() {
         {selected ? (
           <div className="topbar-nav">
             <button className="back-button" onClick={() => setSelectedId(null)} aria-label="Voltar para viveiros">
-              <span className="back-arrow" aria-hidden="true">←</span>
-              <span>Voltar</span>
+              <UiIcon name="back" />
             </button>
             <div className="topbar-title-block">
               <span className="eyebrow">Viveiro</span>
@@ -916,153 +938,149 @@ function PondDetail({
     <section className="page detail-page">
       <div className="pond-header-card">
         <div className="pond-header-top">
-          <div>
-            <span className="eyebrow">Viveiro em produção</span>
-            <h2>{pond.name}</h2>
-          </div>
+          <span className="hero-kicker"><UiIcon name="water" /> Em produção</span>
           <span className={latest ? 'status ready' : 'status waiting'}>
             {latest ? 'Com biometria' : 'Sem biometria'}
           </span>
         </div>
         <div className="pond-density-hero">
           <span>Densidade no controle</span>
-          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} animais/m²</strong>
-          <small>População registrada ÷ área do viveiro</small>
+          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} <em>animais/m²</em></strong>
         </div>
         <p className="pond-header-meta">
-          {formatAreaSquareMeters(pond.areaHa)} m² de área · {formatNumber(populationInControl)} animais no controle · {pond.laboratory || '—'}
+          {formatAreaSquareMeters(pond.areaHa)} m² <span aria-hidden="true">·</span> {formatNumber(populationInControl)} animais <span aria-hidden="true">·</span> {pond.laboratory || 'Laboratório não informado'}
         </p>
-        {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
-          <p className="pond-header-meta">
-            Saldo: {formatNumber(balance.initialPopulation)} iniciais + {formatNumber(balance.incomingAnimals)} recebidos − {formatNumber(balance.outgoingAnimals)} transferidos.
-            Transferências já estão incluídas no saldo; não as repita na população inicial.
-          </p>
-        )}
         <div className="pond-header-badges">
-          <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
+          <span className="info-chip"><UiIcon name="calendar" /> {cultivationDays} dias de cultivo</span>
+          <span className="info-chip">{cycleDays} dias de ciclo</span>
         </div>
       </div>
 
+      {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
+        <details className="balance-detail">
+          <summary>Como foi calculada a população?</summary>
+          <p>{formatNumber(balance.initialPopulation)} iniciais + {formatNumber(balance.incomingAnimals)} recebidos − {formatNumber(balance.outgoingAnimals)} transferidos = <strong>{formatNumber(populationInControl)} animais</strong>.</p>
+          <p>Entradas registradas por transferência não devem ser somadas novamente na população inicial.</p>
+          <button className="text-button" onClick={onEditPond}>Conferir cadastro</button>
+        </details>
+      )}
+
       <div className="operational-actions">
         <button className="primary-button operational-primary" onClick={onAddBiometry}>
-          <span className="button-icon">＋</span> Registrar biometria
+          <UiIcon name="biometry" /> Registrar biometria
         </button>
         <div className="operational-secondary-grid">
           <button className="secondary-button" onClick={onTransfer}>
-            <span className="button-icon">⇄</span> Transferir camarões
+            <UiIcon name="transfer" /> <span>Transferir</span>
           </button>
           <button className="secondary-button" onClick={onProducts}>
-            <span className="button-icon">＋</span> Registrar uso de produto
+            <UiIcon name="product" /> <span>Usar produto</span>
           </button>
           <button className="secondary-button" onClick={onEditPond}>
-            <span className="button-icon">✎</span> Editar dados
+            <UiIcon name="edit" /> <span>Editar viveiro</span>
           </button>
         </div>
       </div>
 
       {latest ? (
-        <>
-          <div className="section-heading">
+        <section className="latest-section" aria-label="Última biometria">
+          <div className="section-heading latest-heading">
             <div>
               <h2>Última biometria</h2>
-              <p>{formatDate(latest.date)} · dia {latest.cultivationDay}</p>
+              <p>Dia {latest.cultivationDay} · {formatDate(latest.date)}</p>
             </div>
-            <button className="text-button" onClick={() => onEditBiometry(latest.id)}>Editar</button>
+            <button className="text-button" onClick={() => onEditBiometry(latest.id)}>
+              <UiIcon name="edit" /> Editar
+            </button>
           </div>
 
-          <div className="metric-section-label">Registrado no campo</div>
-          <div className="metric-grid">
-            {latest.sampleTotalWeightG && latest.sampleCount ? (
-              <>
-                <Metric label="Peso da amostra" value={formatNumber(latest.sampleTotalWeightG) + ' g'} featured />
-                <Metric label="Qtd. amostrada" value={formatNumber(latest.sampleCount) + ' animais'} />
-                <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-                <Metric label="Ração no período" value={formatNumber(latest.periodFeedKg ?? 0) + ' kg'} />
-              </>
-            ) : (
-              <>
-                <Metric label="Peso médio do relatório" value={formatNumber(latest.currentWeightG, 1) + ' g'} featured />
-                <Metric label="Taxa alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
-                <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-                <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
-              </>
-            )}
+          <div className="latest-metrics">
+            <Metric label="Peso médio" value={formatNumber(latest.currentWeightG, 2) + ' g'} featured />
+            <Metric label="Ganho" value={latest.previousWeightG === null ? '—' : formatSigned(round(latest.growthG, 2), 2) + ' g'} />
+            <Metric label="Cresc. médio" value={latest.previousWeightG === null ? '—' : formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
 
-          <div className="metric-section-label calculated-label">Calculado automaticamente</div>
-          <div className="metric-grid">
-            {latest.sampleTotalWeightG && latest.sampleCount && (
-              <Metric label="Peso médio" value={formatNumber(latest.currentWeightG, 2) + ' g'} featured />
-            )}
-            <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
-            {latest.previousWeightG === null ? (
-              <Metric label="Comparação" value="Linha de base" />
-            ) : (
-              <>
-                <Metric label="Ganho desde anterior" value={formatNumber(round(latest.growthG, 2), 2) + ' g'} />
-                <Metric label="Cresc. médio" value={formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
-              </>
-            )}
-            {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && (
-              <>
-                <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} featured />
-                <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
-                <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
-                <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-              </>
-            )}
-            {latestTechnical?.hasCalculatedValues && latestTechnical.fca === null && (
-              <p className="technical-inline-note">
-                FCA indisponível após transferência: o consumo acumulado não está separado por lote.
-              </p>
-            )}
-          </div>
-
-          {!latestTechnical?.hasCalculatedValues && (
-            <p className="technical-inline-note">
-              {!latestTechnical?.hasFeedRate ? 'Sem taxa informada para estimar.' : 'Sem ração do dia para estimar.'}
-            </p>
-          )}
-          {latestFeedMismatch && (
+          {latestFeedMismatch ? (
             <div className="feed-integrity-callout" role="alert">
-              <strong>Verifique a ração informada</strong>
-              <p>
-                A ração do período ({formatNumber(latest.periodFeedKg ?? 0)} kg) está menor
-                que a ração de um só dia ({formatNumber(latest.dailyFeedKg)} kg).
-                Confira se os valores foram trocados ao registrar.
-              </p>
-              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>
-                Corrigir ração desta biometria
-              </button>
+              <UiIcon name="warning" />
+              <div className="review-copy">
+                <strong>Conferir ração</strong>
+                <span>O total do período está menor que o de um dia.</span>
+                <details>
+                  <summary>Entender o alerta</summary>
+                  <p>Dia: {formatNumber(latest.dailyFeedKg)} kg. Período: {formatNumber(latest.periodFeedKg ?? 0)} kg. Confira se os valores foram invertidos.</p>
+                </details>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>Revisar</button>
             </div>
-          )}
-          {!latestFeedMismatch && latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible && (
+          ) : latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible ? (
             <div className="feed-integrity-callout" role="status">
-              <strong>Estimativas sob revisão</strong>
-              <p>
-                A ração de {formatNumber(latest.dailyFeedKg)} kg/dia supera em {formatNumber(Math.max(0, latest.dailyFeedKg - (latestTechnical.feedFor100Kg ?? 0)), 2)} kg/dia
-                a referência para 100%, calculada com taxa de {formatNumber(latest.feedRatePercent, 1)}%.
-                Confira a ração, a taxa de alimentação e a população cadastrada.
-                Biomassa, sobrevivência e FCA não são exibidas como válidas.
-              </p>
-              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>
-                Revisar biometria
-              </button>
+              <UiIcon name="warning" />
+              <div className="review-copy">
+                <strong>Revisar estimativas</strong>
+                <span>Ração acima da referência calculada.</span>
+                <details>
+                  <summary>Entender o alerta</summary>
+                  <p>{formatNumber(latest.dailyFeedKg)} kg/dia informados; referência de {formatNumber(latestTechnical.feedFor100Kg ?? 0, 2)} kg/dia, considerando taxa de {formatNumber(latest.feedRatePercent, 1)}%. Confira ração, taxa e população antes de validar biomassa, sobrevivência e FCA.</p>
+                </details>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>Revisar</button>
             </div>
-          )}
+          ) : null}
 
+          <details className="detail-disclosure field-disclosure">
+            <summary>Dados da coleta <span>Ver registros</span></summary>
+            <div className="field-metrics">
+              {latest.sampleTotalWeightG != null && latest.sampleCount != null ? (
+                <>
+                  <Metric label="Peso da amostra" value={formatNumber(latest.sampleTotalWeightG) + ' g'} />
+                  <Metric label="Amostra" value={formatNumber(latest.sampleCount) + ' animais'} />
+                  <Metric label="Ração por dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+                  <Metric label="Ração no período" value={formatNumber(latest.periodFeedKg ?? 0) + ' kg'} />
+                </>
+              ) : (
+                <>
+                  <Metric label="Peso no relatório" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
+                  <Metric label="Taxa de alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
+                  <Metric label="Ração por dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+                  <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+                </>
+              )}
+            </div>
+          </details>
 
-          <ChangeSummary pond={pond} />
-        </>
+          <details className="detail-disclosure metrics-disclosure">
+            <summary>Indicadores calculados <span>{latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? 'Ver estimativas' : 'Sob revisão'}</span></summary>
+            <div className="field-metrics">
+              <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? (
+                <>
+                  <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
+                  <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
+                  <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
+                  <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
+                </>
+              ) : (
+                <p className="technical-inline-note">
+                  {!latestTechnical?.hasFeedRate
+                    ? 'Sem taxa de alimentação para estimar.'
+                    : !latestTechnical?.hasCalculatedValues
+                      ? 'Sem dados suficientes para estimar.'
+                      : 'Biomassa, sobrevivência e FCA indisponíveis até revisar a ração e a taxa.'}
+                </p>
+              )}
+            </div>
+            {latestTechnical?.hasCalculatedValues && latestTechnical.fca === null && (
+              <p className="technical-inline-note">FCA indisponível após transferência sem ração por lote.</p>
+            )}
+            <p className="estimate-footnote">Estimativas dependem da taxa de alimentação; não substituem contagem.</p>
+          </details>
+        </section>
       ) : (
         <div className="empty-card">
-          <div className="empty-icon">≈</div>
-          <h2>Aguardando a primeira biometria</h2>
-          <p>
-            O viveiro tem dados gerais cadastrados, mas ainda não possui biometria realizada.
-            Não mostramos peso, biomassa, sobrevivência ou FCA até existir medição real.
-          </p>
-          <button className="primary-button" onClick={onAddBiometry}>Registrar biometria realizada</button>
+          <div className="empty-icon"><UiIcon name="water" /></div>
+          <h2>Aguardando primeira biometria</h2>
+          <p>Registre uma amostra para começar a acompanhar o viveiro.</p>
         </div>
       )}
 
@@ -1084,15 +1102,11 @@ function PondDetail({
 
       <div className="product-summary-card">
         <div>
-          <span className="eyebrow">Controle de insumos</span>
-          <strong>Produtos e consumo</strong>
-          <p>
-            {productCatalog.length} {productCatalog.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
-            {' · '}
-            {(pond.productUsages ?? []).length} usos acumulados.
-          </p>
+          <span className="eyebrow">Insumos</span>
+          <strong>Produtos</strong>
+          <p>{productCatalog.length} produtos · {(pond.productUsages ?? []).length} usos</p>
         </div>
-        <button className="secondary-button" onClick={onProducts}>Produtos / registrar uso</button>
+        <button className="secondary-button" onClick={onProducts}>Ver produtos</button>
       </div>
 
       <details className="pond-extra-details">
@@ -1132,63 +1146,55 @@ function HistorySection({
   pond: Pond
   onEditBiometry: (id: string) => void
 }) {
+  const [showAll, setShowAll] = useState(false)
   const history = calculateHistory(pond)
   if (!history.length) return null
 
-  return (
-    <>
-      <div className="section-heading">
-        <div>
-          <h2>Biometrias realizadas</h2>
-          <p>{history.length + ' registros'}</p>
-        </div>
-      </div>
+  const recent = [...history].reverse()
+  const visible = showAll ? recent : recent.slice(0, 3)
 
+  return (
+    <section className="biometry-history" aria-label="Histórico de biometrias">
+      <div className="section-heading history-heading">
+        <div>
+          <h2>Biometrias recentes</h2>
+          <p>{history.length} {history.length === 1 ? 'registro' : 'registros'}</p>
+        </div>
+        {history.length > 3 && (
+          <button className="text-button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
+            {showAll ? 'Ver menos' : 'Ver todas'} <span aria-hidden="true">→</span>
+          </button>
+        )}
+      </div>
       <div className="history-list">
-        {[...history].reverse().map((row) => {
+        {visible.map((row) => {
           const technical = technicalMetricsStatus(pond, row)
+          const hasFeedMismatch = row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)
+          const needsReview = hasFeedMismatch || (technical.hasCalculatedValues && !technical.isPlausible)
           return (
             <article className="history-card" key={row.id}>
               <div className="history-date">
+                <UiIcon name="calendar" />
                 <strong>Dia {row.cultivationDay}</strong>
                 <span>{formatDate(row.date)}</span>
               </div>
               <div className="history-values">
-                <span><small>Peso</small>{formatNumber(row.currentWeightG, 2)} g</span>
-                {technical.hasCalculatedValues && technical.isPlausible ? (
-                  <>
-                    <span><small>Biomassa est.</small>{calculatedMetric(technical, 'biomassKg')}</span>
-                    <span><small>Sobrev. est.</small>{calculatedMetric(technical, 'survivalPercent')}</span>
-                    <span><small>FCA est.</small>{calculatedMetric(technical, 'fca')}</span>
-                  </>
-                ) : (
-                  <span className="history-review">
-                    <small>Biomassa · Sobrevivência · FCA</small>
-                    <strong>
-                      {row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)
-                        ? 'Conferir ração diária e do período'
-                        : technical.hasCalculatedValues
-                          ? 'Revisar ração e taxa'
-                          : 'Sem base para estimar'}
-                    </strong>
-                  </span>
-                )}
+                <span className="history-weight"><strong>{formatNumber(row.currentWeightG, 2)} g</strong><small>Peso</small></span>
+                <span><strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong><small>Ganho</small></span>
+                <span><strong>{row.previousWeightG === null ? '—' : formatNumber(round(row.averageGrowthPerWeekG, 2), 2) + ' g/sem'}</strong><small>Cresc. médio</small></span>
               </div>
-              <button
-                className="history-edit-button"
-                onClick={() => onEditBiometry(row.id)}
-                aria-label={'Editar biometria do dia ' + row.cultivationDay}
-              >
+              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Revisar ração e taxa</span>}
+              <button className="history-edit-button" onClick={() => onEditBiometry(row.id)}
+                aria-label={'Editar biometria do dia ' + row.cultivationDay}>
                 Editar
               </button>
             </article>
           )
         })}
       </div>
-    </>
+    </section>
   )
 }
-
 
 function ChangeSummary({ pond }: { pond: Pond }) {
   const history = calculateHistory(pond)
@@ -1391,7 +1397,7 @@ function PondForm({
         {initial && (
           <div className="correction-note">
             <strong>Dados iniciais editáveis</strong>
-            <span>Você pode corrigir área, população inicial, povoamento, ciclo e os demais dados cadastrados. Os indicadores serão recalculados a partir dos novos valores.</span>
+            <span>Alterações aqui atualizam os indicadores do viveiro.</span>
           </div>
         )}
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
@@ -1399,7 +1405,7 @@ function PondForm({
           <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
           <Field label="População inicial (sem transferências)" required>
             <input required type="number" min="0" step="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} />
-            <small>Use zero quando todos os animais do viveiro vieram por transferências já registradas.</small>
+            <small>Se todos vieram por transferência, informe 0.</small>
           </Field>
         </div>
         {draftDensity !== null && (
