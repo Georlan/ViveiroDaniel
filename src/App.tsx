@@ -829,77 +829,55 @@ function PondCard({
 }) {
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, localToday()) + 1)
   const previous = history.length > 1 ? history[history.length - 2] : null
-  const lastChange = latest && previous ? compareBiometriesForDisplay(previous, latest) : null
-  const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
   const populationInControl = populationAtDate(pond, localToday())
+  const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
+  const needsReview = latest && (
+    (latest.periodFeedKg != null && isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)) ||
+    (latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)
+  )
 
   return (
     <article className="pond-card actionable">
       <button className="pond-card-main" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
         <div className="pond-card-head">
-          <div>
-            <span className="pond-name">{pond.name}</span>
-            <div className="pond-density-primary">
-              <span>Densidade no controle</span>
-              <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} animais/m²</strong>
-            </div>
-            <span className="pond-meta">
-              {formatAreaSquareMeters(pond.areaHa)} m² de área · {formatNumber(populationInControl)} animais · {pond.laboratory}
-            </span>
-          </div>
+          <span className="pond-name">{pond.name}</span>
           <span className={latest ? 'status ready' : 'status waiting'}>
-            {latest ? 'Com biometria' : 'Sem biometria'}
+            {latest ? 'Em acompanhamento' : 'Sem biometria'}
           </span>
         </div>
-
-        <div className="report-context">
-          <span>Povoado em {formatDate(pond.stockingDate)}</span>
-          <strong>Hoje: dia {cultivationDay}</strong>
+        <div className="pond-density-primary">
+          <span>Densidade no controle</span>
+          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} <small>animais/m²</small></strong>
         </div>
+        <p className="pond-meta">
+          {formatNumber(populationInControl)} animais · {formatAreaSquareMeters(pond.areaHa)} m²
+        </p>
 
         {latest ? (
-          <>
-            <div className="latest-label">
-              Última biometria: {formatDate(latest.date)} · dia {latest.cultivationDay}
+          <div className="pond-card-latest">
+            <div>
+              <span>Última biometria · dia {latest.cultivationDay}</span>
+              <strong>{formatNumber(latest.currentWeightG, 2)} g</strong>
             </div>
-            <div className="metric-grid compact">
-              <Metric label="Peso" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
-              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? (
-                <>
-                  <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
-                  <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
-                  <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
-                </>
-              ) : (
-                <div className="pond-technical-unavailable">
-                  <small>Biomassa · Sobrevivência · FCA</small>
-                  <strong>
-                    {latestTechnical?.hasCalculatedValues ? 'Revisar ração e taxa' : 'Sem base para estimar'}
-                  </strong>
-                </div>
-              )}
-            </div>
-            {lastChange && (
-              <div className="card-change-summary">
-                Ganho desde a anterior: {formatSigned(lastChange.weightG, 2)} g
+            {previous && (
+              <div>
+                <span>Ganho</span>
+                <strong>{formatSigned(round(latest.currentWeightG - previous.currentWeightG, 2), 2)} g</strong>
               </div>
             )}
-          </>
-        ) : (
-          <div className="empty-inline">
-            <strong>Ainda sem biometria.</strong>
-            <span>Registre a primeira medição para acompanhar o crescimento.</span>
           </div>
+        ) : (
+          <p className="pond-card-empty">Registre a primeira biometria para acompanhar o peso.</p>
         )}
-
+        {needsReview && (
+          <span className="pond-card-alert"><UiIcon name="warning" /> Conferir ração e taxa</span>
+        )}
         <div className="pond-card-cta">
-          <span>Abrir {pond.name}</span>
+          <span>Ver viveiro</span>
           <span className="cta-arrow" aria-hidden="true">→</span>
         </div>
       </button>
-
     </article>
   )
 }
@@ -1193,17 +1171,6 @@ function HistorySection({
         })}
       </div>
     </section>
-  )
-}
-
-function ChangeSummary({ pond }: { pond: Pond }) {
-  const history = calculateHistory(pond)
-  if (history.length < 2) return null
-  const delta = compareBiometriesForDisplay(history[history.length - 2], history[history.length - 1])
-  return (
-    <p className="weight-change-inline">
-      Crescimento desde a anterior: <strong>{formatSigned(delta.weightG, 2)} g</strong>
-    </p>
   )
 }
 
