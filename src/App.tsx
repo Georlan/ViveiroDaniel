@@ -18,6 +18,7 @@ import {
   manualFeedRateForEdit,
   technicalMetricsStatus,
   populationAtDate,
+  populationBalanceAtDate,
 } from './domain/calculations'
 import { reportPonds } from './data/reportData'
 import {
@@ -368,7 +369,7 @@ export default function App() {
   async function saveTransfer(fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) {
     const from = ponds.find((pond) => pond.id === fromId)
     const to = ponds.find((pond) => pond.id === toId)
-    if (!from || !to) return
+    if (!from || !to || fromId === toId) return false
     const out: PopulationMovement = { ...movement, direction: 'out', counterpartPondId: to.id, counterpartPondName: to.name }
     const into: PopulationMovement = { ...movement, direction: 'in', counterpartPondId: from.id, counterpartPondName: from.name }
     const next = ponds.map((pond) => pond.id === fromId
@@ -378,6 +379,7 @@ export default function App() {
         : pond)
     const saved = await persist(next)
     if (saved) setModal(null)
+    return saved
   }
 
   async function saveBiometry(input: BiometryInput) {
@@ -787,6 +789,7 @@ function calculatedMetric(
   if (!status?.hasCalculatedValues) return 'Sem base'
   if (!status.isPlausible) return 'Revisar estimativa'
   const value = status[kind]
+  if (kind === 'fca' && value === null) return 'Após transferência'
   if (value === null || !Number.isFinite(value)) return 'Sem base'
   return kind === 'biomassKg'
     ? formatNumber(round(value)) + ' kg'
@@ -899,7 +902,8 @@ function PondDetail({
   const today = localToday()
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
   const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
-  const populationInControl = populationAtDate(pond, today)
+  const balance = populationBalanceAtDate(pond, today)
+  const populationInControl = balance.population
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
   const latestFeedMismatch = latest?.periodFeedKg != null &&
     isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)
@@ -928,6 +932,12 @@ function PondDetail({
         <p className="pond-header-meta">
           {formatAreaSquareMeters(pond.areaHa)} m² de área · {formatNumber(populationInControl)} animais no controle · {pond.laboratory || '—'}
         </p>
+        {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
+          <p className="pond-header-meta">
+            Saldo: {formatNumber(balance.initialPopulation)} iniciais + {formatNumber(balance.incomingAnimals)} recebidos − {formatNumber(balance.outgoingAnimals)} transferidos.
+            Transferências já estão incluídas no saldo; não as repita na população inicial.
+          </p>
+        )}
         <div className="pond-header-badges">
           <span className="info-chip">{cultivationDays} dias de cultivo · {cycleDays} dias de ciclo</span>
         </div>
@@ -1000,6 +1010,11 @@ function PondDetail({
                 <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
                 <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
               </>
+            )}
+            {latestTechnical?.hasCalculatedValues && latestTechnical.fca === null && (
+              <p className="technical-inline-note">
+                FCA indisponível após transferência: o consumo acumulado não está separado por lote.
+              </p>
             )}
           </div>
 
@@ -1213,8 +1228,10 @@ function TransferForm({
   ponds: Pond[]
   source: Pond
   onClose: () => void
-  onSave: (fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) => void
+  onSave: (fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) => Promise<boolean>
 }) {
+  const submittingRef = useRef(false)
+  const [saving, setSaving] = useState(false)
   const targets = ponds.filter((pond) => pond.id !== source.id)
   const sourceHistory = calculateHistory(source)
   const latest = sourceHistory[sourceHistory.length - 1]
@@ -1231,18 +1248,29 @@ function TransferForm({
   const averageWeightG = Number(weight.replace(',', '.'))
   const biomassKg = count * averageWeightG / 1_000_000
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault()
+    if (submittingRef.current) return
     setError('')
     if (!target) return setError('Cadastre outro viveiro antes de transferir.')
     if (date < firstEligibleDate || date > localToday()) return setError('Use uma data entre o povoamento dos dois viveiros e hoje.')
     if (!Number.isInteger(count) || count <= 0) return setError('Informe a quantidade inteira de camarões.')
     if (count > sourcePopulation) return setError('A quantidade excede a população registrada no viveiro de origem.')
     if (!Number.isFinite(averageWeightG) || averageWeightG <= 0) return setError('Informe o peso médio atual do lote transferido.')
-    onSave(source.id, target.id, {
-      transferId: id('transfer'), date, animals: count, averageWeightG,
-      biomassKg: round(biomassKg, 3),
-    })
+    submittingRef.current = true
+    setSaving(true)
+    try {
+      const saved = await onSave(source.id, target.id, {
+        transferId: id('transfer'), date, animals: count, averageWeightG,
+        biomassKg: round(biomassKg, 3),
+      })
+      if (!saved) setError('A transferência não foi salva. Confira a sincronização e tente novamente.')
+    } catch {
+      setError('Não foi possível registrar a transferência. Tente novamente.')
+    } finally {
+      submittingRef.current = false
+      setSaving(false)
+    }
   }
 
   return (
@@ -1285,7 +1313,7 @@ function TransferForm({
           {error && <div className="form-error" role="alert">{error}</div>}
           <div className="modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-            <button className="primary-button" type="submit">Registrar transferência</button>
+            <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Registrar transferência'}</button>
           </div>
         </form>
       )}
@@ -1316,14 +1344,19 @@ function PondForm({
 
   const areaM2 = Number(form.areaSquareMeters)
   const initialAnimals = Number(form.initialPopulation)
-  const draftDensity = form.areaSquareMeters.trim() && form.initialPopulation.trim() &&
-    Number.isFinite(areaM2) && areaM2 > 0 &&
-    Number.isFinite(initialAnimals) && initialAnimals > 0
-      ? initialAnimals / areaM2
+  const initialPopulationValid = form.initialPopulation.trim() &&
+    Number.isSafeInteger(initialAnimals) && initialAnimals >= 0
+  const movementBalance = initial && initialPopulationValid
+    ? populationBalanceAtDate({ ...initial, initialPopulation: initialAnimals }, localToday())
+    : null
+  const draftDensity = form.areaSquareMeters.trim() && initialPopulationValid &&
+    Number.isFinite(areaM2) && areaM2 > 0
+      ? (movementBalance?.population ?? initialAnimals) / areaM2
       : null
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    if (!Number.isFinite(areaM2) || areaM2 <= 0 || !initialPopulationValid || (movementBalance && movementBalance.population < 0)) return
     onSave({
       ...(initial ?? {
         id: id('pond'),
@@ -1364,13 +1397,32 @@ function PondForm({
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
-          <Field label="População inicial" required><input required type="number" min="1" step="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} /></Field>
+          <Field label="População inicial (sem transferências)" required>
+            <input required type="number" min="0" step="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} />
+            <small>Use zero quando todos os animais do viveiro vieram por transferências já registradas.</small>
+          </Field>
         </div>
         {draftDensity !== null && (
           <div className="pond-form-density-preview" role="status">
-            <span>Densidade inicial cadastrada</span>
+            <span>{movementBalance ? 'Densidade do saldo com transferências' : 'Densidade inicial cadastrada'}</span>
             <strong>{formatNumber(round(draftDensity, 1), 1)} animais/m²</strong>
-            <small>Calculada pela população inicial e pela área informada; não indica sobrevivência real.</small>
+            {movementBalance ? (
+              <small>
+                {formatNumber(initialAnimals)} iniciais + {formatNumber(movementBalance.incomingAnimals)} entradas − {formatNumber(movementBalance.outgoingAnimals)} saídas
+                = {formatNumber(movementBalance.population)} animais. Não indica sobrevivência real.
+              </small>
+            ) : (
+              <small>Calculada pela população inicial e pela área; não indica sobrevivência real.</small>
+            )}
+          </div>
+        )}
+        {movementBalance && movementBalance.incomingAnimals > 0 && initialAnimals > 0 && (
+          <div className="correction-note">
+            <strong>Confira se a entrada foi contada duas vezes</strong>
+            <span>A população inicial não deve incluir os {formatNumber(movementBalance.incomingAnimals)} camarões já registrados como recebidos por transferência.</span>
+            <button type="button" className="secondary-button" onClick={() => setForm({ ...form, initialPopulation: '0' })}>
+              Usar somente as transferências como população de entrada
+            </button>
           </div>
         )}
         <Field label="Laboratório" required><input required value={form.laboratory} onChange={(e) => setForm({ ...form, laboratory: e.target.value })} /></Field>
@@ -1973,7 +2025,7 @@ function SimpleBiometryForm({
                 <div className="preview-grid">
                   <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
                   <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
-                  <Metric label="FCA est." value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
+                  <Metric label="FCA est." value={calculatedMetric(previewTechnical, 'fca')} />
                   <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
                 </div>
                 <small>Estimativas com taxa de alimentação de {formatNumber(preview.feedRatePercent, 1)}%.</small>

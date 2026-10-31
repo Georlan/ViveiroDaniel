@@ -217,16 +217,37 @@ export function theoreticalBiomassAt100Kg(
   return (pond.initialPopulation * currentWeightG) / 1000
 }
 
+// Cada transferId representa um único evento em cada direção. Registros
+// repetidos no mesmo viveiro não podem duplicar a população do controle.
+export function populationBalanceAtDate(pond: Pick<Pond, 'initialPopulation' | 'populationMovements'>, date: string) {
+  const counted = new Set<string>()
+  let incomingAnimals = 0
+  let outgoingAnimals = 0
+
+  for (const movement of pond.populationMovements ?? []) {
+    if (movement.date > date) continue
+    const key = movement.transferId + ':' + movement.direction
+    if (counted.has(key)) continue
+    counted.add(key)
+    if (movement.direction === 'in') incomingAnimals += movement.animals
+    else outgoingAnimals += movement.animals
+  }
+
+  return {
+    initialPopulation: pond.initialPopulation,
+    incomingAnimals,
+    outgoingAnimals,
+    population: pond.initialPopulation + incomingAnimals - outgoingAnimals,
+  }
+}
+
 export function populationAtDate(pond: Pick<Pond, 'initialPopulation' | 'populationMovements'>, date: string) {
-  return (pond.populationMovements ?? []).reduce((population, movement) => {
-    if (movement.date > date) return population
-    return population + (movement.direction === 'in' ? movement.animals : -movement.animals)
-  }, pond.initialPopulation)
+  return populationBalanceAtDate(pond, date).population
 }
 
 export function technicalMetricsStatus(
-  pond: Pick<Pond, 'initialPopulation'>,
-  input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'> & { populationAtDate?: number },
+  pond: Pick<Pond, 'initialPopulation' | 'populationMovements'>,
+  input: Pick<BiometryInput, 'currentWeightG' | 'feedRatePercent' | 'dailyFeedKg' | 'accumulatedFeedKg'> & { populationAtDate?: number; date?: string },
 ) {
   const population = typeof input.populationAtDate === 'number'
     ? input.populationAtDate
@@ -250,7 +271,12 @@ export function technicalMetricsStatus(
   const feedFor100Kg = maximumBiomassKg * feedRate
   const biomassKg = input.dailyFeedKg / feedRate
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
-  const fca = biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : 0
+  // Sem histórico de ração atribuído a cada lote, o consumo acumulado
+  // não pode ser dividido apenas pela biomassa atual após transferências.
+  const hasTransfers = !!input.date && (pond.populationMovements ?? []).some(
+    (movement) => movement.date <= input.date!,
+  )
+  const fca = hasTransfers ? null : biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : 0
   const tolerance = 0.000001
   // Um cálculo pode existir matematicamente, mesmo sem validar a hipótese de taxa.
   // Separar disponibilidade de plausibilidade evita deixar o painel sem informação.
@@ -259,7 +285,7 @@ export function technicalMetricsStatus(
     maximumBiomassKg > 0 &&
     Number.isFinite(biomassKg) &&
     Number.isFinite(survivalPercent) &&
-    Number.isFinite(fca)
+    (fca === null || Number.isFinite(fca))
   const isPlausible =
     hasCalculatedValues &&
     biomassKg <= maximumBiomassKg + tolerance &&

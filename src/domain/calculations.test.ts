@@ -13,6 +13,8 @@ import {
   manualFeedRateForEdit,
   normalizeBiometryInputs,
   preparationDays,
+  populationAtDate,
+  populationBalanceAtDate,
   round,
   suggestFeedRatePercent,
   technicalMetricsStatus,
@@ -404,4 +406,60 @@ describe('pond calculations', () => {
       expect(round(row.fca, 2)).toBe(expected[index].fca)
     })
   })
+  it('keeps transferred stock separate from initial population and calculates 15.6 animals/m²', () => {
+    const transfer = {
+      transferId: 'movement-78000', date: '2026-10-27', direction: 'in' as const,
+      animals: 78_000, averageWeightG: 4, biomassKg: 312,
+      counterpartPondId: 'v01', counterpartPondName: 'V01',
+    }
+    const destination: Pond = {
+      ...v01, id: 'viveiro-2', initialPopulation: 0,
+      populationMovements: [transfer, { ...transfer }], // duplicate of the same event
+    }
+
+    expect(populationAtDate(destination, '2026-10-26')).toBe(0)
+    expect(populationAtDate(destination, '2026-10-27')).toBe(78_000)
+    expect(densityPerSquareMeter(destination, populationAtDate(destination, '2026-10-27'))).toBe(15.6)
+    expect(populationBalanceAtDate(destination, '2026-10-27')).toEqual({
+      initialPopulation: 0, incomingAnimals: 78_000, outgoingAnimals: 0, population: 78_000,
+    })
+
+    // A duplicated initial entry must not be silently removed: the owner decides.
+    expect(populationAtDate({ ...destination, initialPopulation: 78_000 }, '2026-10-27')).toBe(156_000)
+  })
+
+  it('counts outgoing transfers once and preserves populations at earlier biometric dates', () => {
+    const out = {
+      transferId: 'movement-78000', date: '2026-10-20', direction: 'out' as const,
+      animals: 78_000, averageWeightG: 3.14, biomassKg: 244.92,
+      counterpartPondId: 'viveiro-2', counterpartPondName: 'Viveiro 2',
+    }
+    const origin = { ...v01, populationMovements: [out, { ...out }] }
+    expect(populationAtDate(origin, '2026-10-17')).toBe(220_000)
+    expect(populationAtDate(origin, '2026-10-28')).toBe(142_000)
+  })
+
+  it('does not present an unallocated post-transfer FCA as a valid estimate', () => {
+    const destination = {
+      ...v01,
+      initialPopulation: 0,
+      populationMovements: [{
+        transferId: 'movement-78000', date: '2026-10-20', direction: 'in' as const,
+        animals: 78_000, averageWeightG: 4, biomassKg: 312,
+        counterpartPondId: 'v01', counterpartPondName: 'V01',
+      }],
+    }
+    const status = technicalMetricsStatus(destination, {
+      date: '2026-10-28',
+      populationAtDate: populationAtDate(destination, '2026-10-28'),
+      currentWeightG: 5, feedRatePercent: 3.6,
+      dailyFeedKg: 10, accumulatedFeedKg: 100,
+    })
+    expect(status.hasCalculatedValues).toBe(true)
+    expect(status.isPlausible).toBe(true)
+    expect(status.biomassKg).toBeCloseTo(277.78, 2)
+    expect(status.survivalPercent).toBeCloseTo(277.78 / 390 * 100, 2)
+    expect(status.fca).toBeNull()
+  })
+
 })
