@@ -1667,7 +1667,7 @@ function SimpleBiometryForm({
   return (
     <ModalShell
       title={initial ? 'Editar biometria' : 'Registrar biometria'}
-      subtitle={pond.name + ' · modo simples'}
+      subtitle={pond.name}
       onClose={onClose}
     >
       <form onSubmit={submit} className="form-grid simple-biometry-form">
@@ -1708,10 +1708,8 @@ function SimpleBiometryForm({
           </Field>
         </div>
 
-        {currentWeightG > 0 && Number.isInteger(sampleCount) && !preview && (
-          <p className="biometry-inline-result">
-            Peso médio: <strong>{formatNumber(currentWeightG, 2)} g</strong>
-          </p>
+        {currentWeightG > 0 && Number.isInteger(sampleCount) && sampleCount > 0 && (
+          <p className="biometry-inline-result">Peso médio <strong>{formatNumber(currentWeightG, 2)} g</strong></p>
         )}
 
         <h3 className="form-section-title">Ração</h3>
@@ -1725,12 +1723,11 @@ function SimpleBiometryForm({
             value={form.dailyFeedKg}
             onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
           />
-          <small>Total fornecido em um único dia.</small>
         </Field>
         <Field
           label={
             draftPrevious
-              ? 'Ração desde a última biometria (kg)'
+              ? 'Ração no período (kg)'
               : 'Ração desde o povoamento (kg)'
           }
           required
@@ -1744,18 +1741,13 @@ function SimpleBiometryForm({
             value={form.periodFeedKg}
             onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
           />
-          <small>Soma dos dias desde a última biometria, incluindo o dia deste registro.</small>
+          <small>{draftPrevious ? 'Desde a última biometria, incluindo hoje.' : 'Total desde o povoamento, incluindo hoje.'}</small>
         </Field>
 
         {form.dailyFeedKg.trim() && form.periodFeedKg.trim() &&
           isFeedPeriodInconsistent(Number(form.dailyFeedKg), periodFeedKg) && (
           <div className="feed-entry-review" role="alert">
-            <strong>Os valores de ração não fecham</strong>
-            <p>
-              Você informou {formatNumber(periodFeedKg)} kg para todo o período,
-              mas {formatNumber(Number(form.dailyFeedKg))} kg em um único dia.
-              Verifique se os campos foram invertidos.
-            </p>
+            <strong>Ração do período menor que a do dia.</strong>
             <button
               type="button"
               className="secondary-button"
@@ -1768,7 +1760,7 @@ function SimpleBiometryForm({
                 setError('')
               }}
             >
-              Trocar valores de ração
+              Inverter valores
             </button>
           </div>
         )}
@@ -1779,17 +1771,14 @@ function SimpleBiometryForm({
               <strong>Taxa de alimentação</strong>
               <small>
                 {tableRate
-                  ? 'Referência por peso · toque para ajustar'
-                  : 'Sem referência · informe se souber'}
+                  ? 'Sugestão por peso'
+                  : 'Informe uma taxa se souber'}
               </small>
             </span>
             <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Sem taxa'}</b>
           </summary>
           <div className="technical-adjustment-body">
-            <p>{tableRate
-              ? 'Taxa sugerida pela tabela, não medida. Ajuste só se souber a taxa do manejo.'
-              : 'Peso fora da tabela (0,2 a 30 g). Informe a taxa se souber.'}
-            </p>
+            <p>{tableRate ? 'Taxa sugerida, não medida.' : 'Peso fora da tabela de referência.'}</p>
             <Field label="Ajustar taxa manualmente (%)">
               <input
                 type="number"
@@ -1814,7 +1803,7 @@ function SimpleBiometryForm({
                     setError('')
                   }}
                 >
-                  Voltar para taxa da tabela ({formatNumber(tableRate.ratePercent, 1)}%)
+                  Usar taxa sugerida
                 </button>
               )}
               {form.feedRatePercent && !tableRate && (
@@ -1835,51 +1824,15 @@ function SimpleBiometryForm({
 
         {error && <div className="form-error">{error}</div>}
 
-        {preview && (
-          <div className="preview-card auto-preview-card">
-            <span className="eyebrow">Resumo da biometria</span>
-            <div className="preview-grid">
-              <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
-              {preview.previousWeightG === null ? (
-                <Metric label="Comparação" value="Linha de base" />
-              ) : (
-                <Metric label="Ganho desde anterior" value={formatSigned(preview.growthG, 2) + ' g'} />
-              )}
-              <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
-            </div>
-
-            {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
-              <details className="biometry-extra-metrics">
-                <summary>Ver estimativas técnicas</summary>
-                <div className="preview-grid">
-                  <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
-                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
-                  <Metric label="FCA est." value={calculatedMetric(previewTechnical, 'fca')} />
-                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-                </div>
-                <small>Estimativas com taxa de alimentação de {formatNumber(preview.feedRatePercent, 1)}%.</small>
-              </details>
-            )}
-
-            {!previewTechnical?.hasCalculatedValues && (
-              <p className="technical-inline-note">
-                {!previewTechnical?.hasFeedRate ? 'Falta taxa de alimentação.' : 'Sem ração no dia para estimar.'}
-              </p>
-            )}
-            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
-              <p className="technical-inline-note warning-note">
-                A ração de {formatNumber(preview.dailyFeedKg)} kg/dia supera a referência de {formatNumber(previewTechnical.feedFor100Kg ?? 0, 2)} kg/dia
-                na taxa de {formatNumber(preview.feedRatePercent, 1)}%. Confira a hipótese; as estimativas não são válidas.
-              </p>
-            )}
-
-          </div>
+        {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+          <p className="form-estimate-warning" role="status">
+            Estimativas sob revisão. Confira ração e taxa antes de usar esses indicadores.
+          </p>
         )}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
           <button className="primary-button" type="submit">
-            {initial ? 'Salvar correção' : 'Salvar biometria'}
+            {initial ? 'Salvar alterações' : 'Salvar biometria'}
           </button>
         </div>
       </form>
@@ -1977,11 +1930,8 @@ function LegacyBiometryEditForm({
     <ModalShell title="Editar biometria" subtitle={pond.name + ' · registro histórico'} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         <div className="correction-note historical">
-          <strong>Registro importado do relatório</strong>
-          <span>
-            Este registro antigo não possui peso total da amostra nem ração do período salvos.
-            Por isso a correção usa os campos existentes no relatório. Os cálculos dependentes serão refeitos.
-          </span>
+          <strong>Registro antigo</strong>
+          <span>Edite os campos disponíveis no relatório original.</span>
         </div>
 
         <Field label="Data da biometria" required>
@@ -2046,26 +1996,12 @@ function LegacyBiometryEditForm({
 
         {error && <div className="form-error">{error}</div>}
 
-        {preview && (
-          <div className="preview-card auto-preview-card">
-            <span className="eyebrow">Resultado após a correção</span>
-            <div className="preview-grid">
-              <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
-              {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
-                <>
-                  <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
-                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
-                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-                  <Metric label="FCA" value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
-                </>
-              )}
-            </div>
-          </div>
+        {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+          <p className="form-estimate-warning" role="status">Estimativas sob revisão. Confira ração e taxa.</p>
         )}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">Salvar correção</button>
+          <button className="primary-button" type="submit">Salvar alterações</button>
         </div>
       </form>
     </ModalShell>
