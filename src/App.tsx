@@ -540,7 +540,6 @@ export default function App() {
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
-            onProducts={() => setModal({ kind: 'products' })}
             syncToken={syncToken}
             syncStatus={syncStatus}
             syncMessage={syncMessage}
@@ -587,7 +586,6 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
-  onProducts,
   syncToken,
   syncStatus,
   syncMessage,
@@ -600,7 +598,6 @@ function Dashboard({
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
-  onProducts: () => void
   syncToken: string | null
   syncStatus: SyncStatus
   syncMessage: string
@@ -629,35 +626,21 @@ function Dashboard({
         ))}
       </div>
 
-      <SyncPanel
-        connected={Boolean(syncToken)}
-        status={syncStatus}
-        message={syncMessage}
-        updatedAt={syncUpdatedAt}
-        onActivate={onActivateSharing}
-        onCopy={onCopyShareLink}
-        onRefresh={onSyncNow}
-        onDisconnect={onDisconnectSync}
-      />
-      {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
+      <details className="dashboard-settings">
+        <summary>Compartilhamento e histórico</summary>
+        <SyncPanel
+          connected={Boolean(syncToken)}
+          status={syncStatus}
+          message={syncMessage}
+          updatedAt={syncUpdatedAt}
+          onActivate={onActivateSharing}
+          onCopy={onCopyShareLink}
+          onRefresh={onSyncNow}
+          onDisconnect={onDisconnectSync}
+        />
+        {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
+      </details>
 
-      <article className="product-tracker-card">
-        <div>
-          <span className="eyebrow">Aplicações</span>
-          <strong>Controle de uso de produtos</strong>
-          <p>Consulte os insumos utilizados.</p>
-        </div>
-        <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
-      </article>
-
-      <div className="storage-note">
-        <strong>{syncToken ? 'Fonte compartilhada ativa' : 'Dados salvos neste aparelho'}</strong>
-        <span>
-          {syncToken
-            ? 'O navegador mantém uma cópia local, mas a versão canônica fica na fonte compartilhada.'
-            : 'Sem compartilhamento, cada aparelho possui sua própria cópia local.'}
-        </span>
-      </div>
     </section>
   )
 }
@@ -683,48 +666,27 @@ function SyncPanel({
 }) {
   if (!connected) {
     return (
-      <article className="sync-card">
-        <div className="sync-card-copy">
-          <span className="eyebrow">Dois aparelhos</span>
-          <strong>Usar a mesma fonte de dados</strong>
-          <p>
-            Ative o compartilhamento para o dono e o irmão abrirem o mesmo link e editarem a mesma base.
-          </p>
-          {message && <small className="sync-message">{message}</small>}
-        </div>
-        <button
-          className="secondary-button sync-primary-action"
-          onClick={onActivate}
-          disabled={status === 'connecting' || status === 'syncing'}
-        >
-          {status === 'connecting' ? 'Ativando…' : 'Ativar grátis'}
+      <div className="sync-minimal">
+        <p>Os dados ficam neste aparelho. Ative para usar a mesma base em outros dispositivos.</p>
+        {message && <small role="status" className="sync-message">{message}</small>}
+        <button className="secondary-button" onClick={onActivate}
+          disabled={status === 'connecting' || status === 'syncing'}>
+          {status === 'connecting' ? 'Ativando…' : 'Ativar compartilhamento'}
         </button>
-      </article>
+      </div>
     )
   }
 
   return (
-    <article className={'sync-card connected ' + (status === 'error' ? 'has-error' : '')}>
-      <div className="sync-card-copy">
-        <div className="sync-title-row">
-          <span className="eyebrow">Fonte compartilhada</span>
-          <span className={'sync-dot ' + status} />
-        </div>
-        <strong>{syncStatusLabel(status)}</strong>
-        <p>
-          As alterações salvas aqui são a fonte canônica para todos os aparelhos que possuem o link.
-        </p>
-        {updatedAt && (
-          <small>Última versão: {new Date(updatedAt).toLocaleString('pt-BR')}</small>
-        )}
-        {message && <small className="sync-message">{message}</small>}
-      </div>
+    <div className={'sync-minimal' + (status === 'error' ? ' has-error' : '')}>
+      <p>{syncStatusLabel(status)}{updatedAt ? ' · ' + new Date(updatedAt).toLocaleString('pt-BR') : ''}</p>
+      {message && <small role="status" className="sync-message">{message}</small>}
       <div className="sync-actions">
         <button className="secondary-button" onClick={onCopy}>Copiar link</button>
-        <button className="sync-text-button" onClick={onRefresh}>Atualizar</button>
-        <button className="sync-text-button danger" onClick={onDisconnect}>Só neste aparelho</button>
+        <button className="secondary-button" onClick={onRefresh}>Atualizar</button>
+        <button className="sync-text-button danger" onClick={onDisconnect}>Usar só neste aparelho</button>
       </div>
-    </article>
+    </div>
   )
 }
 
