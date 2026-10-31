@@ -392,3 +392,33 @@ button { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .primary-button, .secondary-button, .history-edit-button { transition: none; }
 }
+
+/* Cartões da tela inicial: um indicador principal e um próximo passo. */
+.pond-list { gap: 12px; }
+.pond-card.actionable { border-radius: 19px; box-shadow: none; }
+.pond-card-main { padding: 17px 17px 13px; }
+.pond-card-head { align-items: center; gap: 12px; }
+.pond-card-head .pond-name { color: var(--text-main); font-size: 1.23rem; font-weight: 800; }
+.pond-card-head .status { font-size: .72rem; padding: 6px 9px; border-radius: 999px; }
+.pond-card-head .status.waiting { color: #ffdc86; }
+.pond-card .pond-density-primary { margin-top: 17px; gap: 4px; }
+.pond-density-primary > span { font-size: .77rem; font-weight: 600; color: var(--text-muted); }
+.pond-card .pond-density-primary > strong { font-size: clamp(1.65rem, 6.5vw, 2rem); color: var(--text-main); letter-spacing: -.035em; }
+.pond-density-primary small { font-size: .51em; font-weight: 700; letter-spacing: -.01em; color: #e3f2ee; }
+.pond-card .pond-meta { display: block; margin: 8px 0 14px; color: var(--text-muted); font-size: .81rem; }
+.pond-card-latest {
+  display: flex;
+  gap: 18px;
+  padding: 13px 0 14px;
+  border-top: 1px solid var(--border-card);
+}
+.pond-card-latest > div { display: grid; gap: 3px; min-width: 0; }
+.pond-card-latest > div + div { padding-left: 17px; border-left: 1px solid var(--border-card); }
+.pond-card-latest span { font-size: .73rem; color: var(--text-muted); }
+.pond-card-latest strong { color: var(--accent-teal); font-size: 1.21rem; letter-spacing: -.02em; }
+.pond-card-latest > div + div strong { color: var(--text-main); }
+.pond-card-empty { padding: 12px 0; margin: 0; border-top: 1px solid var(--border-card); color: var(--text-muted); font-size: .79rem; }
+.pond-card-alert { display: inline-flex; align-items: center; gap: 5px; color: #f4d08a; font-size: .76rem; font-weight: 700; margin-bottom: 10px; }
+.pond-card-alert .ui-icon { width: 15px; height: 15px; }
+.pond-card .pond-card-cta { min-height: 36px; padding: 10px 0 0; border-top: 1px solid var(--border-card); font-size: .8rem; color: var(--accent-teal); }
+.pond-card .cta-arrow { font-size: 1.1rem; }
