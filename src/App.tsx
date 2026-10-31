@@ -1030,38 +1030,37 @@ function HistorySection({
   return (
     <section className="biometry-history" aria-label="Histórico de biometrias">
       <div className="section-heading history-heading">
-        <div>
-          <h2>Biometrias recentes</h2>
-          <p>{history.length} {history.length === 1 ? 'registro' : 'registros'}</p>
-        </div>
+        <h2>Histórico</h2>
         {history.length > 3 && (
           <button className="text-button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
-            {showAll ? 'Ver menos' : 'Ver todas'} <span aria-hidden="true">→</span>
+            {showAll ? 'Ver menos' : 'Ver todas'}
           </button>
         )}
       </div>
       <div className="history-list">
         {visible.map((row) => {
           const technical = technicalMetricsStatus(pond, row)
-          const hasFeedMismatch = row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)
-          const needsReview = hasFeedMismatch || (technical.hasCalculatedValues && !technical.isPlausible)
+          const needsReview = (row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)) ||
+            (technical.hasCalculatedValues && !technical.isPlausible)
           return (
             <article className="history-card" key={row.id}>
               <div className="history-date">
-                <UiIcon name="calendar" />
                 <strong>Dia {row.cultivationDay}</strong>
                 <span>{formatDate(row.date)}</span>
               </div>
               <div className="history-values">
-                <span className="history-weight"><strong>{formatNumber(row.currentWeightG, 2)} g</strong><small>Peso</small></span>
-                <span><strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong><small>Ganho</small></span>
-                <span><strong>{row.previousWeightG === null ? '—' : formatNumber(round(row.averageGrowthPerWeekG, 2), 2) + ' g/sem'}</strong><small>Cresc. médio</small></span>
+                <span className="history-weight">
+                  <strong>{formatNumber(row.currentWeightG, 2)} g</strong>
+                  <small>Peso</small>
+                </span>
+                <span>
+                  <strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong>
+                  <small>Ganho</small>
+                </span>
               </div>
-              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Revisar ração e taxa</span>}
+              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Ração</span>}
               <button className="history-edit-button" onClick={() => onEditBiometry(row.id)}
-                aria-label={'Editar biometria do dia ' + row.cultivationDay}>
-                Editar
-              </button>
+                aria-label={'Editar biometria do dia ' + row.cultivationDay}>Editar</button>
             </article>
           )
         })}
