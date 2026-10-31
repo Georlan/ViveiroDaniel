@@ -1142,12 +1142,12 @@ function TransferForm({
   }
 
   return (
-    <ModalShell title="Transferir camarões" subtitle="Registre a saída e a entrada no mesmo movimento." onClose={onClose}>
+    <ModalShell title="Transferir camarões" subtitle={source.name} onClose={onClose}>
       {targets.length === 0 ? (
         <div className="empty-card">
           <h2>Falta o viveiro de destino</h2>
           <p>Cadastre outro viveiro para registrar a transferência.</p>
-          <button type="button" className="secondary-button" onClick={onClose}>Fechar</button>
+          
         </div>
       ) : (
         <form onSubmit={submit} className="form-grid">
@@ -1165,22 +1165,21 @@ function TransferForm({
           </Field>
           <Field label="Quantidade de camarões" required>
             <input required type="number" min="1" step="1" inputMode="numeric" value={animals} onChange={(event) => setAnimals(event.target.value)} />
-            <small>Disponíveis no controle de {source.name}: {formatNumber(sourcePopulation)}</small>
+            <small>Disponíveis: {formatNumber(sourcePopulation)}</small>
           </Field>
           <Field label="Peso médio transferido (g)" required>
             <input required type="number" min="0.01" step="any" inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} />
-            <small>Pré-preenchido pela última biometria de {source.name}; ajuste se o lote transferido tiver outro peso.</small>
+            
           </Field>
           {count > 0 && target && Number.isFinite(averageWeightG) && averageWeightG > 0 && (
             <div className="transfer-preview">
               <strong>{formatNumber(biomassKg, 3)} kg de biomassa estimada</strong>
               <span>{formatNumber(sourcePopulation - count)} animais ficam em {source.name} · {formatNumber(targetPopulation + count)} passam ao controle de {target.name}</span>
-              <small>Estimativa calculada pela quantidade × peso médio. O peso do destino será confirmado na próxima biometria.</small>
+              
             </div>
           )}
           {error && <div className="form-error" role="alert">{error}</div>}
           <div className="modal-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
             <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Registrar transferência'}</button>
           </div>
         </form>
@@ -1251,17 +1250,11 @@ function PondForm({
 
   return (
     <ModalShell
-      title={initial ? 'Editar dados do viveiro' : 'Novo viveiro'}
-      subtitle={initial ? 'Dados iniciais e população do lote.' : 'Cadastre os dados palpáveis do lote.'}
+      title={initial ? 'Editar viveiro' : 'Novo viveiro'}
+      subtitle=""
       onClose={onClose}
     >
       <form onSubmit={submit} className="form-grid">
-        {initial && (
-          <div className="correction-note">
-            <strong>Dados iniciais editáveis</strong>
-            <span>Alterações aqui atualizam os indicadores do viveiro.</span>
-          </div>
-        )}
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
@@ -1274,22 +1267,15 @@ function PondForm({
           <div className="pond-form-density-preview" role="status">
             <span>{movementBalance ? 'Densidade do saldo com transferências' : 'Densidade inicial cadastrada'}</span>
             <strong>{formatNumber(round(draftDensity, 1), 1)} animais/m²</strong>
-            {movementBalance ? (
-              <small>
-                {formatNumber(initialAnimals)} iniciais + {formatNumber(movementBalance.incomingAnimals)} entradas − {formatNumber(movementBalance.outgoingAnimals)} saídas
-                = {formatNumber(movementBalance.population)} animais. Não indica sobrevivência real.
-              </small>
-            ) : (
-              <small>Calculada pela população inicial e pela área; não indica sobrevivência real.</small>
-            )}
+
           </div>
         )}
         {movementBalance && movementBalance.incomingAnimals > 0 && initialAnimals > 0 && (
           <div className="correction-note">
-            <strong>Confira se a entrada foi contada duas vezes</strong>
-            <span>A população inicial não deve incluir os {formatNumber(movementBalance.incomingAnimals)} camarões já registrados como recebidos por transferência.</span>
+            <strong>Possível duplicidade</strong>
+            <span>{formatNumber(movementBalance.incomingAnimals)} animais já entraram por transferência.</span>
             <button type="button" className="secondary-button" onClick={() => setForm({ ...form, initialPopulation: '0' })}>
-              Usar somente as transferências como população de entrada
+              Zerar população inicial
             </button>
           </div>
         )}
@@ -1303,8 +1289,7 @@ function PondForm({
           <Field label="PL/g"><input type="number" min="0" step="any" inputMode="decimal" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">{initial ? 'Salvar dados' : 'Criar viveiro'}</button>
+          <button className="primary-button" type="submit">{initial ? 'Salvar alterações' : 'Criar viveiro'}</button>
         </div>
       </form>
     </ModalShell>
@@ -1383,15 +1368,8 @@ function ProductUsageForm({
   }
 
   return (
-    <ModalShell title="Produtos" subtitle="Consumo acumulado do viveiro." onClose={onClose}>
+    <ModalShell title="Produtos" subtitle="" onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
-        <div className="correction-note">
-          <strong>O produto é cadastrado no primeiro uso</strong>
-          <span>
-            Depois disso, cada novo uso soma ao mesmo produto. A tela mostra o total consumido e o consumo do mês para ajudar a planejar a próxima compra.
-          </span>
-        </div>
-
         <div className="two-cols">
           <Field label="Viveiro" required>
             <select
@@ -1425,13 +1403,6 @@ function ProductUsageForm({
           <datalist id="registered-products">
             {registeredNames.map((name) => <option key={name} value={name} />)}
           </datalist>
-          <small>
-            {findRegisteredProduct(usages, form.product)
-              ? 'Produto já cadastrado. Este uso será somado ao total existente.'
-              : form.product.trim()
-                ? 'Novo produto: ele será cadastrado automaticamente ao salvar o primeiro uso.'
-                : 'Produtos já cadastrados aparecem como sugestão.'}
-          </small>
         </Field>
 
         <div className="two-cols">
@@ -1470,15 +1441,11 @@ function ProductUsageForm({
         {error && <div className="form-error">{error}</div>}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">Somar uso</button>
+          <button className="primary-button" type="submit">Registrar uso</button>
         </div>
 
         <div className="usage-period-head product-catalog-head">
-          <div>
-            <span className="eyebrow">Produtos cadastrados</span>
-            <strong>Consumo acumulado</strong>
-          </div>
+          <strong>Consumo</strong>
           <input
             className="month-input"
             type="month"
@@ -1494,7 +1461,7 @@ function ProductUsageForm({
                 <div className="product-consumption-head">
                   <div>
                     <strong>{product.product}</strong>
-                    <span>{product.uses} {product.uses === 1 ? 'uso registrado' : 'usos acumulados'}</span>
+
                   </div>
                   <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
                 </div>
@@ -1510,17 +1477,11 @@ function ProductUsageForm({
                   </div>
                 </div>
 
-                <small className="purchase-reference">
-                  O consumo do mês é a referência rápida para planejar a reposição deste produto.
-                </small>
               </article>
             ))}
           </div>
         ) : (
-          <div className="empty-inline">
-            <strong>Nenhum produto cadastrado ainda.</strong>
-            <span>O primeiro uso cria o produto automaticamente.</span>
-          </div>
+          <p className="empty-inline">Nenhum uso registrado.</p>
         )}
       </form>
     </ModalShell>
@@ -2137,7 +2098,7 @@ function ModalShell({
         <div className="modal-handle" />
         <div className="modal-head">
           <div>
-            <span className="eyebrow">{subtitle}</span>
+            {subtitle && <span className="eyebrow">{subtitle}</span>}
             <h2>{title}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
