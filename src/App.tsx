@@ -1444,45 +1444,49 @@ function ProductUsageForm({
           <button className="primary-button" type="submit">Registrar uso</button>
         </div>
 
-        <div className="usage-period-head product-catalog-head">
-          <strong>Consumo</strong>
-          <input
-            className="month-input"
-            type="month"
-            value={form.month}
-            onChange={(e) => setForm({ ...form, month: e.target.value })}
-          />
-        </div>
-
-        {products.length ? (
-          <div className="product-catalog">
-            {products.map((product) => (
-              <article className="product-consumption-card" key={product.key}>
-                <div className="product-consumption-head">
-                  <div>
-                    <strong>{product.product}</strong>
-
+        <details className="product-consumption-details">
+          <summary>Ver consumo ({products.length})</summary>
+          <div className="usage-period-head product-catalog-head">
+                    <strong>Consumo</strong>
+                    <input
+                      className="month-input"
+                      type="month"
+                      value={form.month}
+                      onChange={(e) => setForm({ ...form, month: e.target.value })}
+                    />
                   </div>
-                  <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
-                </div>
-
-                <div className="product-consumption-metrics">
-                  <div>
-                    <span>Usado no mês</span>
-                    <strong>{formatProductUsageAmount(product.monthBase, product.dimension)}</strong>
-                  </div>
-                  <div>
-                    <span>Último uso</span>
-                    <strong>{formatDate(product.lastDate)}</strong>
-                  </div>
-                </div>
-
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-inline">Nenhum uso registrado.</p>
-        )}
+          
+                  {products.length ? (
+                    <div className="product-catalog">
+                      {products.map((product) => (
+                        <article className="product-consumption-card" key={product.key}>
+                          <div className="product-consumption-head">
+                            <div>
+                              <strong>{product.product}</strong>
+          
+                            </div>
+                            <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
+                          </div>
+          
+                          <div className="product-consumption-metrics">
+                            <div>
+                              <span>Usado no mês</span>
+                              <strong>{formatProductUsageAmount(product.monthBase, product.dimension)}</strong>
+                            </div>
+                            <div>
+                              <span>Último uso</span>
+                              <strong>{formatDate(product.lastDate)}</strong>
+                            </div>
+                          </div>
+          
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-inline">Nenhum uso registrado.</p>
+                  )}
+          
+        </details>
       </form>
     </ModalShell>
   )
