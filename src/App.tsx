@@ -1022,16 +1022,17 @@ function HistorySection({
 }) {
   const [showAll, setShowAll] = useState(false)
   const history = calculateHistory(pond)
-  if (!history.length) return null
+  if (history.length < 2) return null
 
-  const recent = [...history].reverse()
+  // A última medição já aparece acima, com acesso à edição.
+  const recent = history.slice(0, -1).reverse()
   const visible = showAll ? recent : recent.slice(0, 3)
 
   return (
     <section className="biometry-history" aria-label="Histórico de biometrias">
       <div className="section-heading history-heading">
-        <h2>Histórico</h2>
-        {history.length > 3 && (
+        <h2>Biometrias anteriores</h2>
+        {recent.length > 3 && (
           <button className="text-button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
             {showAll ? 'Ver menos' : 'Ver todas'}
           </button>
