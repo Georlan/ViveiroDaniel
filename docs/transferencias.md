@@ -2,7 +2,7 @@
 
 O registro de transferência cria uma saída no viveiro de origem e uma entrada no destino, com o mesmo identificador e a mesma data. A população de controle em uma data é a população inicial somada às entradas e subtraída das saídas ocorridas até aquela data. As biometrias anteriores à transferência continuam usando a população que existia na data de cada medição.
 
-A biomassa movimentada é estimada por `quantidade transferida × peso médio (g) ÷ 1.000.000`, em kg. O peso sugerido vem da última biometria da origem e pode ser ajustado para representar o lote transferido. O registro não altera o peso amostrado do destino; uma nova biometria é necessária para medir a mistura real.
+A biomassa movimentada é estimada por `quantidade transferida × peso médio (g) ÷ 1.000`, em kg. Por exemplo, 1.000 animais × 10 g = 10.000 g = 10 kg. O peso sugerido vem da última biometria da origem e pode ser ajustado para representar o lote transferido. O registro não altera o peso amostrado do destino; uma nova biometria é necessária para medir a mistura real.
 
 O saldo de animais é um livro de movimentações baseado na população cadastrada. Ele não desconta mortalidade não registrada e, portanto, não substitui uma contagem ou estimativa de sobrevivência. A biomassa transferida também é uma estimativa baseada no peso médio informado.
 
@@ -33,6 +33,7 @@ Sem a distribuição do consumo de ração entre lotes ou medição confiável d
 biomassa na movimentação, `ração acumulada / biomassa atual` não fornece
 um FCA interpretável após transferências. O aplicativo mantém os dados medidos
 e as estimativas plausíveis de biomassa e sobrevivência sob a hipótese da
-taxa informada, mas mostra o FCA como indisponível após a primeira
-transferência na data da biometria. Não atribuir automaticamente um FCA
+taxa informada, mas mostra o FCA como indisponível enquanto faltar ganho independente de biomassa e
+contabilização dos fluxos no período. Isso também vale antes de transferências quando a
+biomassa é inferida da própria ração. Não atribuir automaticamente um FCA
 artificial a animais recebidos de outro viveiro.

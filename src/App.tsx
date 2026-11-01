@@ -1,10 +1,10 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   accumulatedFeedFromPeriod,
   averageWeightFromSample,
+  biomassFromAnimals,
   calculateBiometry,
   calculateHistory,
-  compareBiometriesForDisplay,
   daysBetween,
   densityPerSquareMeter,
   hectaresFromSquareMeters,
@@ -12,35 +12,31 @@ import {
   normalizeBiometryInputs,
   preparationDays,
   round,
-  feedRateFromWeightTable,
   isCompleteSimpleBiometryDraft,
   isFeedPeriodInconsistent,
-  manualFeedRateForEdit,
   technicalMetricsStatus,
   populationAtDate,
   populationBalanceAtDate,
 } from './domain/calculations'
-import { reportPonds } from './data/reportData'
+import { demonstrationPonds } from './data/demonstration'
+import { BiometryList } from './components/BiometryList'
+import { BiometryEvolution } from './components/BiometryEvolution'
+import { FeedSimulation } from './components/FeedSimulation'
+import { FeedReferencePanel } from './components/FeedReferencePanel'
+import { BiometryRecordDetails } from './components/BiometryRecordDetails'
+import { formatDate, formatNumber, formatSigned } from './format'
 import {
   aggregateProductUsages,
   findRegisteredProduct,
   formatProductAmount,
 } from './domain/productUsage'
 import type { BiometryInput, Pond, PopulationMovement, ProductUsage } from './types'
-import { describeRevision } from './domain/audit'
-import {
-  buildShareUrl,
-  clearStoredSyncToken,
-  consumeInviteTokenFromUrl,
-  createSyncToken,
-  fetchRemoteState,
-  getStoredSyncToken,
-  fetchRemoteHistory,
-  saveRemoteState,
-  storeSyncToken,
-  SyncApiError,
-  type RemoteState,
-} from './sync'
+import { loadLocalPondsLocked, saveLocalPondsLocked, createBackup, createRecoveryBackup } from './storage'
+import { LocalBackupPanel } from './components/LocalBackupPanel'
+
+export const StorageMessageContext = createContext('')
+
+const browserStorage = { getItem: (key: string) => window.localStorage.getItem(key), setItem: (key: string, value: string) => window.localStorage.setItem(key, value) }
 
 
 type UiIconName = 'back' | 'water' | 'biometry' | 'transfer' | 'product' | 'edit' | 'calendar' | 'warning'
@@ -65,61 +61,7 @@ function UiIcon({ name }: { name: UiIconName }) {
   )
 }
 
-const STORAGE_KEY = 'viveiro-daniel:v3'
-const LEGACY_STORAGE_KEYS = ['viveiro-daniel:v2', 'viveiro-daniel:v1']
-
-function cloneReportData() {
-  return JSON.parse(JSON.stringify(reportPonds)) as Pond[]
-}
-
-function normalizePondState(pond: Pond): Pond {
-  const base = reportPonds.find((item) => item.id === pond.id)
-  const isLegacyV01 = pond.id === 'v01' && pond.dataVersion !== 2
-
-  return {
-    ...pond,
-    dataVersion: 2,
-    reportReferenceDate: null,
-    plannedBiometries: [],
-    biometries: isLegacyV01 ? [] : pond.biometries ?? [],
-    productUsages: pond.productUsages ?? base?.productUsages ?? [],
-  }
-}
-
-function loadPonds() {
-  try {
-    const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]
-    for (const key of keys) {
-      const stored = localStorage.getItem(key)
-      if (!stored) continue
-
-      const next = (JSON.parse(stored) as Pond[])
-        .filter((pond) => pond.id !== 'v02')
-        .map(normalizePondState)
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
-    }
-
-    return cloneReportData().map(normalizePondState)
-  } catch {
-    return cloneReportData().map(normalizePondState)
-  }
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return '—'
-  const [year, month, day] = value.split('-')
-  return day + '/' + month + '/' + year
-}
-
-function formatNumber(value: number, decimals = 0) {
-  return new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
-}
-
+const DEMO_MODE = import.meta.env.DEV && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === '2'
 function formatAreaSquareMeters(areaHa: number) {
   const squareMeters = round(squareMetersFromHectares(areaHa), 2)
   return formatNumber(squareMeters, Number.isInteger(squareMeters) ? 0 : 2)
@@ -129,11 +71,6 @@ function formatProductUsageAmount(baseQuantity: number, dimension: 'mass' | 'vol
   const amount = formatProductAmount(baseQuantity, dimension)
   const decimals = Number.isInteger(amount.value) ? 0 : 2
   return formatNumber(amount.value, decimals) + ' ' + amount.unit
-}
-
-function formatSigned(value: number, decimals = 0) {
-  if (value === 0) return formatNumber(0, decimals)
-  return (value > 0 ? '+' : '') + formatNumber(value, decimals)
 }
 
 function id(prefix: string) {
@@ -156,33 +93,40 @@ type Modal =
   | { kind: 'transfer' }
   | null
 
-type SyncStatus = 'local' | 'connecting' | 'synced' | 'syncing' | 'error'
-
-function syncStatusLabel(status: SyncStatus) {
-  if (status === 'connecting') return 'Conectando…'
-  if (status === 'syncing') return 'Salvando…'
-  if (status === 'synced') return 'Compartilhado'
-  if (status === 'error') return 'Verificar sync'
-  return 'Neste aparelho'
-}
-
 export default function App() {
-  const [ponds, setPonds] = useState<Pond[]>(loadPonds)
+  const [loaded] = useState(() => DEMO_MODE
+    ? { ponds: demonstrationPonds(), raw: null, blocked: false, message: '' }
+    : { ponds: [] as Pond[], raw: null as string | null, blocked: true, message: 'Abrindo os registros deste aparelho…' })
+  const [ponds, setPonds] = useState<Pond[]>(loaded.ponds)
+  const [storageBlocked, setStorageBlocked] = useState(loaded.blocked)
+  const [storageMessage, setStorageMessage] = useState(loaded.message)
+  const storageRawRef = useRef(loaded.raw)
+  useEffect(() => {
+    if (DEMO_MODE) return
+    let cancelled = false
+    void loadLocalPondsLocked(browserStorage, navigator.locks).then(result => {
+      if (cancelled) return
+      storageRawRef.current = result.raw
+      setPonds(result.ponds)
+      setStorageBlocked(result.blocked)
+      setStorageMessage(result.message)
+    }).catch(() => {
+      if (!cancelled) setStorageMessage('Não foi possível acessar os registros. Recarregue a página sem limpar os dados do site.')
+    })
+    return () => { cancelled = true }
+  }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [selectedId])
   const [modal, setModal] = useState<Modal>(null)
-  const [syncToken, setSyncToken] = useState<string | null>(() => getStoredSyncToken())
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(
-    getStoredSyncToken() ? 'connecting' : 'local',
-  )
-  const [syncMessage, setSyncMessage] = useState('')
-  const [syncUpdatedAt, setSyncUpdatedAt] = useState<string | null>(null)
-  const syncVersionRef = useRef(0)
-  const syncBusyRef = useRef(false)
-
+  const [notice, setNotice] = useState('')
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(''), 6000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
   const selected = ponds.find((pond) => pond.id === selectedId) ?? null
   const editingBiometry =
     selected && modal?.kind === 'biometry' && modal.editId
@@ -193,176 +137,37 @@ export default function App() {
       ? ponds.find((pond) => pond.id === modal.editId) ?? null
       : null
 
-  function cacheLocally(next: Pond[]) {
-    setPonds(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  }
-
-  function applyRemote(remote: RemoteState) {
-    const next = remote.ponds
-      .filter((pond) => pond.id !== 'v02')
-      .map(normalizePondState)
-    syncVersionRef.current = remote.version
-    cacheLocally(next)
-    setSyncUpdatedAt(remote.updatedAt)
-    setSyncStatus('synced')
-  }
-
-  function syncErrorMessage(error: unknown) {
-    if (error instanceof SyncApiError) return error.message
-    return 'Não foi possível sincronizar agora.'
-  }
-
-  useEffect(() => {
-    const inviteToken = consumeInviteTokenFromUrl()
-    if (!inviteToken) return
-
-    storeSyncToken(inviteToken)
-    setSyncToken(inviteToken)
-    setSyncStatus('connecting')
-    setSyncMessage('Entrando na fonte compartilhada…')
-  }, [])
-
-  useEffect(() => {
-    if (!syncToken) {
-      syncVersionRef.current = 0
-      setSyncStatus('local')
-      return
-    }
-
-    const token = syncToken
-    let cancelled = false
-
-    async function connect() {
-      if (syncBusyRef.current) return
-      syncBusyRef.current = true
-      setSyncStatus('connecting')
-
-      try {
-        const remote = await fetchRemoteState(token)
-        if (cancelled) return
-
-        if (!remote) {
-          setSyncStatus('error')
-          setSyncMessage(
-            'Este link compartilhado ainda não possui uma fonte criada. Ative o compartilhamento no aparelho principal primeiro.',
-          )
-          return
-        }
-
-        applyRemote(remote)
-        setSyncMessage('Usando a mesma fonte de dados em todos os aparelhos com este link.')
-      } catch (error) {
-        if (cancelled) return
-        setSyncStatus('error')
-        setSyncMessage(syncErrorMessage(error))
-      } finally {
-        syncBusyRef.current = false
-      }
-    }
-
-    void connect()
-
-    return () => {
-      cancelled = true
-    }
-  }, [syncToken])
-
-  useEffect(() => {
-    if (!syncToken) return
-
-    const token = syncToken
-    let stopped = false
-
-    async function pullLatest() {
-      if (
-        stopped ||
-        syncBusyRef.current ||
-        document.visibilityState !== 'visible'
-      ) {
-        return
-      }
-
-      syncBusyRef.current = true
-      try {
-        const remote = await fetchRemoteState(token)
-        if (!remote || stopped) return
-
-        if (remote.version > syncVersionRef.current) {
-          applyRemote(remote)
-          setSyncMessage('Atualizado com as mudanças do outro aparelho.')
-        }
-      } catch (error) {
-        if (!stopped) {
-          setSyncStatus('error')
-          setSyncMessage(syncErrorMessage(error))
-        }
-      } finally {
-        syncBusyRef.current = false
-      }
-    }
-
-    const timer = window.setInterval(() => {
-      void pullLatest()
-    }, 15_000)
-
-    const onFocus = () => void pullLatest()
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void pullLatest()
-    }
-
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibility)
-
-    return () => {
-      stopped = true
-      window.clearInterval(timer)
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [syncToken])
-
-  async function persist(next: Pond[]) {
-    if (!syncToken) {
-      cacheLocally(next)
-      return true
-    }
-
-    if (syncBusyRef.current) {
-      setSyncStatus('error')
-      setSyncMessage('Aguarde a sincronização terminar e tente salvar novamente.')
-      return false
-    }
-
-    syncBusyRef.current = true
-    setSyncStatus('syncing')
-    setSyncMessage('Salvando na fonte compartilhada…')
-
+  async function persist(next: Pond[], restoring = false) {
+    if (storageBlocked && !restoring) return false
     try {
-      const remote = await saveRemoteState(
-        syncToken,
-        next,
-        syncVersionRef.current,
-      )
-      applyRemote(remote)
-      setSyncMessage('Salvo. Os outros aparelhos receberão esta versão automaticamente.')
+      if (!DEMO_MODE) storageRawRef.current = await saveLocalPondsLocked(browserStorage, next, storageRawRef.current, navigator.locks)
+      setPonds(next)
+      setStorageBlocked(false)
+      setStorageMessage('')
       return true
     } catch (error) {
-      if (error instanceof SyncApiError && error.code === 'conflict' && error.remote) {
-        applyRemote(error.remote)
-        setSyncStatus('error')
-        setSyncMessage(
-          'O outro aparelho salvou uma mudança primeiro. A versão mais nova foi carregada; revise e salve novamente.',
-        )
-        return false
-      }
-
-      setSyncStatus('error')
-      setSyncMessage(syncErrorMessage(error))
+      setStorageMessage(error instanceof Error && error.message.includes('outra aba')
+        ? error.message : 'Não foi possível salvar neste navegador. A alteração não foi gravada. Exporte um backup e confira o espaço disponível.')
       return false
-    } finally {
-      syncBusyRef.current = false
     }
+  }
+
+  function downloadBackup(recovery = false) {
+    try {
+      const content = recovery ? createRecoveryBackup(browserStorage) : createBackup(ponds)
+      const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'viveiro-daniel-' + (recovery ? 'recuperacao-' : 'backup-') + localToday() + '.json'
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { setStorageMessage('Não foi possível exportar os dados deste navegador.') }
+  }
+
+  async function importBackup(next: Pond[]) {
+    const saved = await persist(next, true)
+    if (saved) { setSelectedId(null); setNotice('Backup importado neste aparelho.') }
+    return saved
   }
 
   async function addPond(pond: Pond) {
@@ -371,12 +176,13 @@ export default function App() {
 
     setSelectedId(pond.id)
     setModal(null)
+    setNotice('Viveiro cadastrado.')
   }
 
   async function updatePond(pond: Pond) {
     const next = ponds.map((item) => (item.id === pond.id ? pond : item))
     const saved = await persist(next)
-    if (saved) setModal(null)
+    if (saved) { setModal(null); setNotice('Cadastro atualizado.') }
   }
 
   async function saveProductUsage(pondId: string, usage: ProductUsage) {
@@ -386,7 +192,7 @@ export default function App() {
         : pond,
     )
     const saved = await persist(next)
-    if (saved) setModal(null)
+    if (saved) { setModal(null); setNotice('Uso de produto registrado.') }
   }
 
   async function saveTransfer(fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) {
@@ -401,7 +207,7 @@ export default function App() {
         ? { ...pond, populationMovements: [...(pond.populationMovements ?? []), into] }
         : pond)
     const saved = await persist(next)
-    if (saved) setModal(null)
+    if (saved) { setModal(null); setNotice('Transferência registrada.') }
     return saved
   }
 
@@ -423,86 +229,11 @@ export default function App() {
     })
 
     const saved = await persist(next)
-    if (saved) setModal(null)
-  }
-
-  async function activateSharing() {
-    if (syncBusyRef.current) return
-
-    syncBusyRef.current = true
-    setSyncStatus('connecting')
-    setSyncMessage('Criando a fonte compartilhada…')
-
-    const token = createSyncToken()
-
-    try {
-      const remote = await saveRemoteState(token, ponds, 0)
-      storeSyncToken(token)
-      setSyncToken(token)
-      applyRemote(remote)
-      setSyncMessage(
-        'Compartilhamento ativado. Copie o link e envie apenas para quem deve editar estes dados.',
-      )
-    } catch (error) {
-      clearStoredSyncToken()
-      setSyncToken(null)
-      setSyncStatus('local')
-      setSyncMessage(syncErrorMessage(error))
-    } finally {
-      syncBusyRef.current = false
-    }
-  }
-
-  async function copyShareLink() {
-    if (!syncToken) return
-    const url = buildShareUrl(syncToken)
-
-    try {
-      await navigator.clipboard.writeText(url)
-      setSyncMessage('Link compartilhado copiado. Quem abrir esse link usará a mesma fonte.')
-    } catch {
-      setSyncMessage('Não foi possível copiar automaticamente. Tente novamente pelo navegador.')
-    }
-  }
-
-  async function syncNow() {
-    if (!syncToken || syncBusyRef.current) return
-
-    syncBusyRef.current = true
-    setSyncStatus('connecting')
-    setSyncMessage('Buscando a versão mais recente…')
-
-    try {
-      const remote = await fetchRemoteState(syncToken)
-      if (!remote) {
-        setSyncStatus('error')
-        setSyncMessage('A fonte compartilhada não foi encontrada.')
-        return
-      }
-
-      applyRemote(remote)
-      setSyncMessage('Dados atualizados com a fonte compartilhada.')
-    } catch (error) {
-      setSyncStatus('error')
-      setSyncMessage(syncErrorMessage(error))
-    } finally {
-      syncBusyRef.current = false
-    }
-  }
-
-  function disconnectSync() {
-    clearStoredSyncToken()
-    setSyncToken(null)
-    syncVersionRef.current = 0
-    setSyncUpdatedAt(null)
-    setSyncStatus('local')
-    setSyncMessage(
-      'Este aparelho voltou ao modo local. A cópia compartilhada continua existindo para quem tiver o link.',
-    )
+    if (saved) { setModal(null); setNotice('Pesagem salva.') }
   }
 
   return (
-    <div className="app-shell">
+    <StorageMessageContext.Provider value={storageMessage}><div className="app-shell">
       <header className="topbar">
         {selected ? (
           <div className="topbar-nav">
@@ -516,15 +247,18 @@ export default function App() {
           </div>
         ) : (
           <div className="topbar-brand">
-            <span className="eyebrow">Controle zootécnico</span>
-            <h1>Viveiros</h1>
+            <img src="/assets/brand.svg" width="44" height="44" alt="" />
+            <div><h1>Viveiro Daniel</h1><span>Controle de viveiros</span></div>
           </div>
         )}
-        <span className={syncToken ? 'device-badge synced' : 'device-badge'}>
-          {syncStatusLabel(syncStatus)}
+        <span className="device-badge">
+          {DEMO_MODE ? 'Demonstração' : 'Neste aparelho'}
         </span>
       </header>
 
+      {DEMO_MODE && <div className="demo-notice">Prévia local: V01 do relatório enviado; V02 fictício. Testes não são salvos.</div>}
+      {notice && <div className="save-notice" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Fechar aviso">×</button></div>}
+      {storageMessage && <div className="storage-message" role={storageBlocked ? "alert" : "status"}>{storageMessage}</div>}
       <main>
         {selected ? (
           <PondDetail
@@ -540,14 +274,10 @@ export default function App() {
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
-            syncToken={syncToken}
-            syncStatus={syncStatus}
-            syncMessage={syncMessage}
-            syncUpdatedAt={syncUpdatedAt}
-            onActivateSharing={() => void activateSharing()}
-            onCopyShareLink={() => void copyShareLink()}
-            onSyncNow={() => void syncNow()}
-            onDisconnectSync={disconnectSync}
+            storageBlocked={storageBlocked}
+            onExport={() => downloadBackup()}
+            onRecovery={() => downloadBackup(true)}
+            onImport={importBackup}
           />
         )}
       </main>
@@ -578,42 +308,19 @@ export default function App() {
           onSave={saveBiometry}
         />
       )}
-    </div>
+    </div></StorageMessageContext.Provider>
   )
 }
 
-function Dashboard({
-  ponds,
-  onOpen,
-  onAdd,
-  syncToken,
-  syncStatus,
-  syncMessage,
-  syncUpdatedAt,
-  onActivateSharing,
-  onCopyShareLink,
-  onSyncNow,
-  onDisconnectSync,
-}: {
-  ponds: Pond[]
-  onOpen: (id: string) => void
-  onAdd: () => void
-  syncToken: string | null
-  syncStatus: SyncStatus
-  syncMessage: string
-  syncUpdatedAt: string | null
-  onActivateSharing: () => void
-  onCopyShareLink: () => void
-  onSyncNow: () => void
-  onDisconnectSync: () => void
+function Dashboard({ ponds, onOpen, onAdd, storageBlocked, onExport, onRecovery, onImport }: {
+  ponds: Pond[]; onOpen: (id: string) => void; onAdd: () => void; storageBlocked: boolean;
+  onExport: () => void; onRecovery: () => void; onImport: (ponds: Pond[]) => Promise<boolean>
 }) {
   return (
-    <section className="page">
-      <div className="section-heading compact-heading">
-        <div>
-          <h2>Produção em andamento</h2>
-        </div>
-        <button className="text-button" onClick={onAdd}>Adicionar</button>
+    <section className="page dashboard-page">
+      <div className="dashboard-intro">
+        <div><h2>Seus viveiros</h2><p>Pesagens e registros do cultivo.</p></div>
+        <span className="pond-count">{ponds.length} {ponds.length === 1 ? 'viveiro' : 'viveiros'}</span>
       </div>
 
       <div className="pond-list">
@@ -626,173 +333,24 @@ function Dashboard({
         ))}
       </div>
 
-      <details className="dashboard-settings">
-        <summary>Compartilhamento e histórico</summary>
-        <SyncPanel
-          connected={Boolean(syncToken)}
-          status={syncStatus}
-          message={syncMessage}
-          updatedAt={syncUpdatedAt}
-          onActivate={onActivateSharing}
-          onCopy={onCopyShareLink}
-          onRefresh={onSyncNow}
-          onDisconnect={onDisconnectSync}
-        />
-        {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
-      </details>
+      <button className="add-pond-button" disabled={storageBlocked} onClick={onAdd}><UiIcon name="biometry" /> Adicionar viveiro</button>
+      {!ponds.length && !storageBlocked && <p className="empty-local-state">Cadastre o primeiro viveiro ou importe um backup deste cultivo.</p>}
+      {!DEMO_MODE && <LocalBackupPanel ponds={ponds} blocked={storageBlocked} onExport={onExport} onRecovery={onRecovery} onImport={onImport} />}
 
     </section>
   )
 }
 
-function SyncPanel({
-  connected,
-  status,
-  message,
-  updatedAt,
-  onActivate,
-  onCopy,
-  onRefresh,
-  onDisconnect,
-}: {
-  connected: boolean
-  status: SyncStatus
-  message: string
-  updatedAt: string | null
-  onActivate: () => void
-  onCopy: () => void
-  onRefresh: () => void
-  onDisconnect: () => void
-}) {
-  if (!connected) {
-    return (
-      <div className="sync-minimal">
-        <p>Os dados ficam neste aparelho. Ative para usar a mesma base em outros dispositivos.</p>
-        {message && <small role="status" className="sync-message">{message}</small>}
-        <button className="secondary-button" onClick={onActivate}
-          disabled={status === 'connecting' || status === 'syncing'}>
-          {status === 'connecting' ? 'Ativando…' : 'Ativar compartilhamento'}
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className={'sync-minimal' + (status === 'error' ? ' has-error' : '')}>
-      <p>{syncStatusLabel(status)}{updatedAt ? ' · ' + new Date(updatedAt).toLocaleString('pt-BR') : ''}</p>
-      {message && <small role="status" className="sync-message">{message}</small>}
-      <div className="sync-actions">
-        <button className="secondary-button" onClick={onCopy}>Copiar link</button>
-        <button className="secondary-button" onClick={onRefresh}>Atualizar</button>
-        <button className="sync-text-button danger" onClick={onDisconnect}>Usar só neste aparelho</button>
-      </div>
-    </div>
-  )
-}
-
-function HistoryPanel({ syncToken }: { syncToken: string }) {
-  const [revisions, setRevisions] = useState<RemoteState[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function loadHistory() {
-    if (loading) return
-    setLoading(true)
-    setError('')
-    try {
-      const result = await fetchRemoteHistory(syncToken)
-      setRevisions(result.revisions)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Falha ao consultar alterações.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const entries = revisions?.slice(0, -1).map((revision, index) => ({
-    version: revision.version,
-    updatedAt: revision.updatedAt,
-    changes: describeRevision(revisions[index + 1].ponds, revision.ponds),
-  })) ?? []
-
-  return (
-    <article className="sync-card history-panel">
-      <div className="sync-card-copy">
-        <span className="eyebrow">Conferência de registros</span>
-        <strong>Histórico de alterações</strong>
-        <p>
-          Consulte o que mudou entre as versões salvas na fonte compartilhada.
-          Os registros começam após esta atualização; versões antigas não podem ser recuperadas.
-          O histórico mostra valores, não identifica qual pessoa digitou.
-        </p>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loading}
-          onClick={() => void loadHistory()}
-        >
-          {loading ? 'Consultando…' : revisions ? 'Atualizar histórico' : 'Ver alterações salvas'}
-        </button>
-        {error && <small className="sync-message" role="alert">{error}</small>}
-        {revisions && (
-          <div className="history-revisions">
-            {entries.length === 0 && (
-              <small>Aguardando duas versões registradas para comparar as alterações.</small>
-            )}
-            {entries.map((entry) => (
-              <details key={entry.version} className="technical-adjustment">
-                <summary>
-                  <span>
-                    <strong>{new Date(entry.updatedAt).toLocaleString('pt-BR')}</strong>
-                    <small>Versão {entry.version} · {entry.changes.length} alterações</small>
-                  </span>
-                </summary>
-                <div className="technical-adjustment-body">
-                  {entry.changes.length ? entry.changes.map((change, index) => (
-                    <p key={index}>
-                      <strong>{change.pond}: </strong>{change.description}
-                    </p>
-                  )) : (
-                    <p>Sem mudanças detectadas nos campos acompanhados.</p>
-                  )}
-                </div>
-              </details>
-            ))}
-            <small>São exibidas até 20 alterações de versão recentes, sem identificar usuários.</small>
-          </div>
-        )}
-      </div>
-    </article>
-  )
-}
-
-function calculatedMetric(
-  status: ReturnType<typeof technicalMetricsStatus> | null,
-  kind: 'biomassKg' | 'survivalPercent' | 'fca',
-) {
-  if (!status?.hasCalculatedValues) return 'Sem base'
-  if (!status.isPlausible) return 'Revisar estimativa'
-  const value = status[kind]
-  if (kind === 'fca' && value === null) return 'Após transferência'
-  if (value === null || !Number.isFinite(value)) return 'Sem base'
-  return kind === 'biomassKg'
-    ? formatNumber(round(value)) + ' kg'
-    : kind === 'survivalPercent'
-      ? formatNumber(round(value)) + '%'
-      : formatNumber(round(value, 2), 2)
-}
-
-function PondCard({
+export function PondCard({
   pond,
   onOpen,
 }: {
   pond: Pond
   onOpen: () => void
 }) {
+  const populationInControl=populationAtDate(pond,localToday())
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
-  const previous = history.length > 1 ? history[history.length - 2] : null
-  const populationInControl = populationAtDate(pond, localToday())
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
   const needsReview = latest && (
     (latest.periodFeedKg != null && isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)) ||
@@ -803,42 +361,23 @@ function PondCard({
     <article className="pond-card actionable">
       <button className="pond-card-main" onClick={onOpen} aria-label={'Abrir ' + pond.name}>
         <div className="pond-card-head">
-          <span className="pond-name">{pond.name}</span>
-          <span className={latest ? 'status ready' : 'status waiting'}>
-            {latest ? 'Em acompanhamento' : 'Sem biometria'}
-          </span>
+          <div className="pond-identity">
+            <img src="/assets/pond.svg" alt="" width="92" height="68" />
+            <div><span className="pond-name">{pond.name}</span><span className="pond-cycle">Ciclo {pond.cycle}</span></div>
+          </div>
+          <span className={'pond-status' + (latest ? '' : ' pending')}>{latest ? history.length + (history.length === 1 ? ' pesagem' : ' pesagens') : 'Sem pesagens'}</span>
         </div>
-        <div className="pond-density-primary">
-          <span>Densidade no controle</span>
-          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} <small>animais/m²</small></strong>
-        </div>
-        <p className="pond-meta">
-          {formatNumber(populationInControl)} animais · {formatAreaSquareMeters(pond.areaHa)} m²
-        </p>
-
+        <div className="pond-density-line"><span>Animais por área</span><strong>{formatNumber(densityPerSquareMeter(pond,populationInControl),1)} <small>animais/m²</small></strong></div>
         {latest ? (
-          <div className="pond-card-latest">
-            <div>
-              <span>Última biometria · dia {latest.cultivationDay}</span>
-              <strong>{formatNumber(latest.currentWeightG, 2)} g</strong>
-            </div>
-            {previous && (
-              <div>
-                <span>Ganho</span>
-                <strong>{formatSigned(round(latest.currentWeightG - previous.currentWeightG, 2), 2)} g</strong>
-              </div>
-            )}
+          <div className="pond-card-readings">
+            <div><span>Peso médio</span><strong>{formatNumber(latest.currentWeightG, 2)} <small>g</small></strong></div>
+            <div><span>Última pesagem</span><strong className="reading-date">{formatDate(latest.date).slice(0, 5)}</strong></div>
           </div>
         ) : (
-          <p className="pond-card-empty">Registre a primeira biometria para acompanhar o peso.</p>
+          <div className="pond-card-start"><strong>Comece com a primeira amostra</strong><span>Registre a primeira amostra de camarões.</span></div>
         )}
-        {needsReview && (
-          <span className="pond-card-alert"><UiIcon name="warning" /> Conferir ração e taxa</span>
-        )}
-        <div className="pond-card-cta">
-          <span>Ver viveiro</span>
-          <span className="cta-arrow" aria-hidden="true">→</span>
-        </div>
+        <div className="pond-card-bottom"><span>Acompanhar viveiro</span><UiIcon name="back" /></div>
+        {needsReview && <span className="pond-card-alert"><UiIcon name="warning" /> Conferir ração e taxa</span>}
       </button>
     </article>
   )
@@ -859,121 +398,55 @@ export function PondDetail({
   onEditPond: () => void
   onProducts: () => void
 }) {
+  const [biometryView,setBiometryView]=useState<'compare'|'list'>('compare')
   const history = calculateHistory(pond)
   const latest = history[history.length - 1]
   const today = localToday()
-  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
+  const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today) + 1)
   const balance = populationBalanceAtDate(pond, today)
   const populationInControl = balance.population
-  const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
-  const latestFeedMismatch = latest?.periodFeedKg != null &&
-    isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)
 
   return (
     <section className="page detail-page">
       <div className="pond-header-card">
-        <div className="pond-header-top">
-          <span className="hero-kicker">Dia {cultivationDays} de cultivo</span>
-        </div>
-        <div className="pond-density-hero">
-          <span>Densidade no controle</span>
-          <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} <em>animais/m²</em></strong>
-        </div>
-        <p className="pond-header-meta">
-          {formatNumber(populationInControl)} animais · {formatAreaSquareMeters(pond.areaHa)} m²
-        </p>
+        <div className="pond-hero-top"><span>Ciclo {pond.cycle}</span><span>Desde {formatDate(pond.stockingDate).slice(0, 5)}</span></div>
+        <div className="pond-hero-main"><div><strong>{latest ? formatNumber(latest.currentWeightG,2) : String(cultivationDays)}<small>{latest ? ' g' : ' dias'}</small></strong><span>{latest ? 'última amostra · '+formatDate(latest.date).slice(0,5) : 'sem pesagem registrada'}</span></div><img src="/assets/pond.svg" width="112" height="76" alt="" /></div>
+        <div className="pond-density-readout"><span>Animais por área</span><strong>{formatNumber(densityPerSquareMeter(pond,populationInControl),1)} <small>animais/m²</small></strong></div>
+        <p className="pond-context-caption">Saldo cadastral: {formatNumber(populationInControl)} animais <span>Área: {formatAreaSquareMeters(pond.areaHa)} m²</span></p>
       </div>
+
+      {balance.initialPopulation>0 && balance.incomingAnimals>0 && <div className="stock-review-note"><strong>Confira a composição do saldo</strong><p>{formatNumber(balance.initialPopulation)} iniciais + {formatNumber(balance.incomingAnimals)} recebidos − {formatNumber(balance.outgoingAnimals)} saídos = {formatNumber(balance.population)} animais. Se os iniciais e os recebidos forem o mesmo lote, o cadastro precisa ser corrigido.</p><button className="text-button" onClick={onEditPond}>Revisar população inicial</button></div>}
 
       <div className="operational-actions">
         <button className="primary-button operational-primary" onClick={onAddBiometry}>
-          <UiIcon name="biometry" /> Registrar biometria
+          <UiIcon name="biometry" /> Registrar pesagem
         </button>
-        <div className="operational-secondary-grid">
+
+      </div>
+
+      {history.length>0 && <div className="biometry-view-switch" role="group" aria-label="Visualização das biometrias"><button aria-pressed={biometryView==='compare'} onClick={()=>setBiometryView('compare')}>Comparar</button><button aria-pressed={biometryView==='list'} onClick={()=>setBiometryView('list')}>Lista completa ({history.length})</button></div>}
+      {latest && biometryView==='list' ? <BiometryList pond={pond} onEdit={onEditBiometry}/> : latest ? (
+        history.length>1 ? <BiometryEvolution pond={pond} onEdit={onEditBiometry}/> :
+        <section className="latest-section" aria-label="Primeira biometria">
+          <div className="section-heading"><div><h2>Primeira pesagem</h2><p>{formatDate(latest.date)}</p></div><button className="text-button" onClick={()=>onEditBiometry(latest.id)}>Editar</button></div>
+          <div className="first-measurement"><span>Peso médio da amostra</span><strong>{formatNumber(latest.currentWeightG,2)} g</strong><p>A próxima pesagem permitirá comparar a variação. Não há crescimento calculado a partir de um único registro.</p></div>
+          <BiometryRecordDetails record={latest}/><FeedSimulation pond={pond} current={latest}/>
+        </section>
+      ) : (
+        <div className="empty-card first-weighing">
+          <img src="/assets/sample.svg" width="112" height="98" alt="" />
+          <div><h2>Comece pela primeira pesagem</h2><p>Pese e conte uma amostra. Depois, informe a ração para iniciar o acompanhamento.</p></div>
+        </div>
+      )}
+      <div className="more-record-actions">        <div className="operational-secondary-grid">
           <button className="secondary-button" onClick={onTransfer}>
-            <UiIcon name="transfer" /> <span>Transferir</span>
+            <UiIcon name="transfer" /> <span>Transferir<small>Entre viveiros</small></span>
           </button>
           <button className="secondary-button" onClick={onProducts}>
-            <UiIcon name="product" /> <span>Produtos</span>
+            <UiIcon name="product" /> <span>Produtos<small>Registrar uso</small></span>
           </button>
         </div>
       </div>
-
-      {latest ? (
-        <section className="latest-section" aria-label="Última biometria">
-          <div className="section-heading latest-heading">
-            <div>
-              <h2>Última biometria</h2>
-              <p>Dia {latest.cultivationDay} · {formatDate(latest.date)}</p>
-            </div>
-            <button className="text-button" onClick={() => onEditBiometry(latest.id)}>
-              Editar
-            </button>
-          </div>
-
-          <div className="latest-metrics">
-            <Metric label="Peso médio" value={formatNumber(latest.currentWeightG, 2) + ' g'} featured />
-            <Metric label="Ganho" value={latest.previousWeightG === null ? '—' : formatSigned(round(latest.growthG, 2), 2) + ' g'} />
-            <Metric label="Cresc. médio" value={latest.previousWeightG === null ? '—' : formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
-          </div>
-
-          {(latestFeedMismatch || (latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)) && (
-            <div className="feed-integrity-callout" role="alert">
-              <UiIcon name="warning" />
-              <span>{latestFeedMismatch ? 'Conferir ração do período' : 'Estimativas sob revisão'}</span>
-              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>Revisar</button>
-            </div>
-          )}
-
-          <details className="detail-disclosure field-disclosure">
-            <summary>Dados da biometria</summary>
-            <div className="field-metrics">
-              {latest.sampleTotalWeightG != null && latest.sampleCount != null ? (
-                <>
-                  <Metric label="Peso da amostra" value={formatNumber(latest.sampleTotalWeightG) + ' g'} />
-                  <Metric label="Amostra" value={formatNumber(latest.sampleCount) + ' animais'} />
-                  <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-                  <Metric label="Ração no período" value={formatNumber(latest.periodFeedKg ?? 0) + ' kg'} />
-                </>
-              ) : (
-                <>
-                  <Metric label="Taxa de alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
-                  <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-                </>
-              )}
-              <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
-              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && (
-                <>
-                  <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
-                  <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
-                  <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
-                </>
-              )}
-            </div>
-            {latestFeedMismatch ? (
-              <p className="technical-inline-note">
-                O período ({formatNumber(latest.periodFeedKg ?? 0)} kg) é menor que a ração de um dia ({formatNumber(latest.dailyFeedKg)} kg).
-              </p>
-            ) : latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible ? (
-              <p className="technical-inline-note">
-                {formatNumber(latest.dailyFeedKg)} kg/dia superam a referência de {formatNumber(latestTechnical.feedFor100Kg ?? 0, 2)} kg/dia com taxa de {formatNumber(latest.feedRatePercent, 1)}%. Confira os dados antes de usar biomassa, sobrevivência e FCA.
-              </p>
-            ) : !latestTechnical?.hasCalculatedValues ? (
-              <p className="technical-inline-note">Sem dados suficientes para estimar biomassa, sobrevivência e FCA.</p>
-            ) : null}
-            {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && latestTechnical.fca === null && (
-              <p className="technical-inline-note">FCA indisponível após transferência sem ração por lote.</p>
-            )}
-            <p className="estimate-footnote">Biomassa e sobrevivência são estimativas baseadas na taxa de alimentação.</p>
-          </details>
-        </section>
-      ) : (
-        <div className="empty-card">
-          <h2>Sem biometria</h2>
-          <p>Registre a primeira amostra.</p>
-        </div>
-      )}
-
-      <HistorySection pond={pond} onEditBiometry={onEditBiometry} />
 
       {(pond.populationMovements ?? []).length > 0 && (
         <details className="pond-extra-details movement-history">
@@ -990,16 +463,16 @@ export function PondDetail({
       )}
 
       <details className="pond-extra-details">
-        <summary>Dados do viveiro</summary>
+        <summary>Cadastro do viveiro</summary>
         <div className="facts-grid">
-          <Fact label="Área" value={formatAreaSquareMeters(pond.areaHa) + ' m²'} />
+          <Fact label="Densidade registrada" value={formatNumber(densityPerSquareMeter(pond, populationInControl), 1) + ' animais/m²'} />
           <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
           <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
           <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
           <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
           <Fact label="Ciclo" value={String(pond.cycle)} />
           <Fact label="Laboratório" value={pond.laboratory || '—'} />
-          <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
+          <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram,Number.isInteger(pond.plPerGram)?0:2)} />
           <Fact label="Raçoador" value={pond.feeder || '—'} />
         </div>
         {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
@@ -1013,72 +486,6 @@ export function PondDetail({
   )
 }
 
-function HistorySection({
-  pond,
-  onEditBiometry,
-}: {
-  pond: Pond
-  onEditBiometry: (id: string) => void
-}) {
-  const [showAll, setShowAll] = useState(false)
-  const history = calculateHistory(pond)
-  if (history.length < 2) return null
-
-  // A última medição já aparece acima, com acesso à edição.
-  const recent = history.slice(0, -1).reverse()
-  const visible = showAll ? recent : recent.slice(0, 3)
-
-  return (
-    <section className="biometry-history" aria-label="Histórico de biometrias">
-      <div className="section-heading history-heading">
-        <h2>Biometrias anteriores</h2>
-        {recent.length > 3 && (
-          <button className="text-button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
-            {showAll ? 'Ver menos' : 'Ver todas'}
-          </button>
-        )}
-      </div>
-      <div className="history-list">
-        {visible.map((row) => {
-          const technical = technicalMetricsStatus(pond, row)
-          const needsReview = (row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)) ||
-            (technical.hasCalculatedValues && !technical.isPlausible)
-          return (
-            <article className="history-card" key={row.id}>
-              <div className="history-date">
-                <strong>Dia {row.cultivationDay}</strong>
-                <span>{formatDate(row.date)}</span>
-              </div>
-              <div className="history-values">
-                <span className="history-weight">
-                  <strong>{formatNumber(row.currentWeightG, 2)} g</strong>
-                  <small>Peso</small>
-                </span>
-                <span>
-                  <strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong>
-                  <small>Ganho</small>
-                </span>
-              </div>
-              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Ração</span>}
-              <button className="history-edit-button" onClick={() => onEditBiometry(row.id)}
-                aria-label={'Editar biometria do dia ' + row.cultivationDay}>Editar</button>
-            </article>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-function Metric({ label, value, featured = false }: { label: string; value: string; featured?: boolean }) {
-  return (
-    <div className={featured ? 'metric featured' : 'metric'}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="fact">
@@ -1088,7 +495,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-function TransferForm({
+export function TransferForm({
   ponds,
   source,
   onClose,
@@ -1100,6 +507,7 @@ function TransferForm({
   onSave: (fromId: string, toId: string, movement: Omit<PopulationMovement, 'direction' | 'counterpartPondId' | 'counterpartPondName'>) => Promise<boolean>
 }) {
   const submittingRef = useRef(false)
+  const [destinationConfirmed,setDestinationConfirmed]=useState(false)
   const [saving, setSaving] = useState(false)
   const targets = ponds.filter((pond) => pond.id !== source.id)
   const sourceHistory = calculateHistory(source)
@@ -1115,7 +523,7 @@ function TransferForm({
   const targetPopulation = target ? populationAtDate(target, date) : 0
   const count = Number(animals)
   const averageWeightG = Number(weight.replace(',', '.'))
-  const biomassKg = count * averageWeightG / 1_000_000
+  const biomassKg = biomassFromAnimals(count, averageWeightG)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -1125,6 +533,7 @@ function TransferForm({
     if (date < firstEligibleDate || date > localToday()) return setError('Use uma data entre o povoamento dos dois viveiros e hoje.')
     if (!Number.isInteger(count) || count <= 0) return setError('Informe a quantidade inteira de camarões.')
     if (count > sourcePopulation) return setError('A quantidade excede a população registrada no viveiro de origem.')
+    if (targetPopulation>0 && !destinationConfirmed) return setError('Confirme que estes animais são adicionais aos já cadastrados no destino.')
     if (!Number.isFinite(averageWeightG) || averageWeightG <= 0) return setError('Informe o peso médio atual do lote transferido.')
     submittingRef.current = true
     setSaving(true)
@@ -1156,21 +565,21 @@ function TransferForm({
             <span><small>Origem</small><strong>{source.name}</strong></span>
             <span aria-hidden="true">→</span>
             <Field label="Destino" required>
-              <select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+              <select value={targetId} onChange={(event) => {setTargetId(event.target.value);setDestinationConfirmed(false)}}>
                 {targets.map((pond) => <option value={pond.id} key={pond.id}>{pond.name}</option>)}
               </select>
             </Field>
           </div>
           <Field label="Data da transferência" required>
-            <input required type="date" min={firstEligibleDate} max={localToday()} value={date} onChange={(event) => setDate(event.target.value)} />
+            <input required type="date" min={firstEligibleDate} max={localToday()} value={date} onChange={(event) => {setDate(event.target.value);setDestinationConfirmed(false)}} />
           </Field>
           <Field label="Quantidade de camarões" required>
-            <input required type="number" min="1" step="1" inputMode="numeric" value={animals} onChange={(event) => setAnimals(event.target.value)} />
+            <input required type="number" min="1" step="1" inputMode="numeric" value={animals} onChange={(event) => {setAnimals(event.target.value);setDestinationConfirmed(false)}} />
             <small>Disponíveis: {formatNumber(sourcePopulation)}</small>
           </Field>
           <Field label="Peso médio transferido (g)" required>
             <input required type="number" min="0.01" step="any" inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} />
-            
+            {latest && <small>Valor da última pesagem de {formatDate(latest.date)}. Confirme o peso atual do lote transferido.</small>}
           </Field>
           {count > 0 && target && Number.isFinite(averageWeightG) && averageWeightG > 0 && (
             <div className="transfer-preview">
@@ -1179,6 +588,7 @@ function TransferForm({
               
             </div>
           )}
+          {targetPopulation>0 && <div className="destination-check"><strong>O destino já tem {formatNumber(targetPopulation)} animais cadastrados.</strong><label><input type="checkbox" required checked={destinationConfirmed} onChange={event=>setDestinationConfirmed(event.target.checked)}/><span>Sim, estou adicionando outros animais a esse saldo.</span></label><p>Se são os mesmos animais já cadastrados, revise a população inicial do destino antes de transferir. Isso evita contá-los duas vezes.</p></div>}
           {error && <div className="form-error" role="alert">{error}</div>}
           <div className="modal-actions">
             <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Registrar transferência'}</button>
@@ -1189,7 +599,7 @@ function TransferForm({
   )
 }
 
-function PondForm({
+export function PondForm({
   initial,
   onClose,
   onSave,
@@ -1198,6 +608,7 @@ function PondForm({
   onClose: () => void
   onSave: (pond: Pond) => void
 }) {
+  const [stockingMode,setStockingMode]=useState<'direct'|'transfer'>(initial?.initialPopulation===0?'transfer':'direct')
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     areaSquareMeters: initial ? String(squareMetersFromHectares(initial.areaHa)) : '',
@@ -1257,11 +668,12 @@ function PondForm({
     >
       <form onSubmit={submit} className="form-grid">
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <fieldset className="stock-origin"><legend>Como começou a população?</legend><label><input type="radio" name="stock-origin" checked={stockingMode==='direct'} onChange={()=>setStockingMode('direct')}/><span>Povoamento direto</span></label><label><input type="radio" name="stock-origin" checked={stockingMode==='transfer'} onChange={()=>{setStockingMode('transfer');setForm({...form,initialPopulation:'0'})}}/><span>Recebidos por transferência<small>Sem povoamento inicial próprio</small></span></label></fieldset>
         <div className="two-cols">
           <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
           <Field label="População inicial (sem transferências)" required>
-            <input required type="number" min="0" step="1" inputMode="numeric" value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} />
-            <small>Se todos vieram por transferência, informe 0.</small>
+            <input required type="number" min="0" step="1" inputMode="numeric" readOnly={stockingMode==='transfer'} value={form.initialPopulation} onChange={(e) => setForm({ ...form, initialPopulation: e.target.value })} />
+            <small>Não some aqui os animais que já entraram por transferência. Nesse caso, a população inicial é 0 e a entrada é registrada em Transferir.</small>
           </Field>
         </div>
         {draftDensity !== null && (
@@ -1280,7 +692,7 @@ function PondForm({
             </button>
           </div>
         )}
-        <Field label="Laboratório" required><input required value={form.laboratory} onChange={(e) => setForm({ ...form, laboratory: e.target.value })} /></Field>
+        <Field label={stockingMode==='transfer' ? 'Laboratório (se conhecido)' : 'Laboratório'} required={stockingMode==='direct'}><input required={stockingMode==='direct'} value={form.laboratory} onChange={(e) => setForm({ ...form, laboratory: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Povoamento" required><input required type="date" value={form.stockingDate} onChange={(e) => setForm({ ...form, stockingDate: e.target.value })} /></Field>
           <Field label="Início do ciclo" required><input required type="date" value={form.cycleStartDate} onChange={(e) => setForm({ ...form, cycleStartDate: e.target.value })} /></Field>
@@ -1369,8 +781,8 @@ function ProductUsageForm({
   }
 
   return (
-    <ModalShell title="Produtos" subtitle="" onClose={onClose}>
-      <form onSubmit={submit} className="form-grid">
+    <ModalShell title="Registrar produto" subtitle={selectedPond?.name ?? ''} onClose={onClose}>
+      <form onSubmit={submit} className="form-grid product-usage-form">
         <div className="two-cols">
           <Field label="Viveiro" required>
             <select
@@ -1556,6 +968,16 @@ function SimpleBiometryForm({
     [pond, initial?.id],
   )
 
+  const [step, setStep] = useState(0)
+  const formRef = useRef<HTMLFormElement>(null)
+  const previousStepRef = useRef(0)
+  useEffect(() => {
+    if (step === previousStepRef.current) return
+    previousStepRef.current = step
+    formRef.current?.querySelector<HTMLElement>('[data-step-title]')?.focus()
+    const sheet = formRef.current?.closest<HTMLElement>('.modal-sheet')
+    if (sheet) sheet.scrollTop = 0
+  }, [step])
   const [error, setError] = useState('')
   const [form, setForm] = useState({
     date: initial?.date ?? localToday(),
@@ -1564,7 +986,7 @@ function SimpleBiometryForm({
     sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
     dailyFeedKg: initial ? String(initial.dailyFeedKg) : '',
     periodFeedKg: initial?.periodFeedKg != null ? String(initial.periodFeedKg) : '',
-    feedRatePercent: manualFeedRateForEdit(initial),
+    feedRatePercent: initial && initial.feedRatePercent>0 ? String(initial.feedRatePercent) : '',
   })
 
   const draftPrevious = [...historyWithoutInitial]
@@ -1575,10 +997,9 @@ function SimpleBiometryForm({
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
-  const tableRate = feedRateFromWeightTable(currentWeightG)
   const effectiveRate = form.feedRatePercent.trim()
     ? Number(form.feedRatePercent)
-    : tableRate?.ratePercent ?? 0
+    : 0
   const periodFeedKg = Number(form.periodFeedKg)
   const accumulatedFeedKg = accumulatedFeedFromPeriod(
     draftPrevious?.accumulatedFeedKg ?? 0,
@@ -1593,7 +1014,7 @@ function SimpleBiometryForm({
           date: form.date,
           currentWeightG,
           feedRatePercent: effectiveRate,
-          feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
+          feedRateSource: initial && effectiveRate===initial.feedRatePercent ? initial.feedRateSource : 'manual',
           dailyFeedKg: Number(form.dailyFeedKg),
           accumulatedFeedKg,
           sampleTotalWeightG,
@@ -1603,7 +1024,7 @@ function SimpleBiometryForm({
       : null
 
   const preview = parsed
-    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
+    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null, draftPrevious?.date)
     : null
   const previewTechnical = preview ? technicalMetricsStatus(pond, preview) : null
 
@@ -1645,12 +1066,12 @@ function SimpleBiometryForm({
     }
 
     if (isFeedPeriodInconsistent(Number(form.dailyFeedKg), periodFeedKg)) {
-      setError('A ração do período não pode ser menor que a ração de um dia. Confira os valores ou use Trocar valores.')
+      setError('A ração do período não pode ser menor que a ração de um dia. Confira os valores ou use Inverter valores.')
       return
     }
 
-    if (form.feedRatePercent.trim() && (!Number.isFinite(effectiveRate) || effectiveRate <= 0)) {
-      setError('Se ajustar a taxa manualmente, use um valor maior que zero.')
+    if (form.feedRatePercent.trim() && (!Number.isFinite(effectiveRate) || effectiveRate <= 0 || effectiveRate > 100)) {
+      setError('Se informar uma taxa, use um percentual maior que zero e no máximo 100%.')
       return
     }
 
@@ -1660,7 +1081,7 @@ function SimpleBiometryForm({
       date: form.date,
       currentWeightG,
       feedRatePercent: effectiveRate,
-      feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
+      feedRateSource: initial && effectiveRate===initial.feedRatePercent ? initial.feedRateSource : 'manual',
       dailyFeedKg: Number(form.dailyFeedKg),
       accumulatedFeedKg,
       sampleTotalWeightG,
@@ -1671,12 +1092,30 @@ function SimpleBiometryForm({
 
   return (
     <ModalShell
-      title={initial ? 'Editar biometria' : 'Registrar biometria'}
+      title={initial ? 'Editar pesagem' : 'Registrar pesagem'}
       subtitle={pond.name}
       onClose={onClose}
     >
-      <form onSubmit={submit} className="form-grid simple-biometry-form">
-        <Field label="Data da biometria" required>
+      <div className="weighing-progress" aria-label={'Etapa ' + (step + 1) + ' de 2'}>
+        <span className={step === 0 ? 'current' : 'complete'}>1. Amostra</span><span className={step === 1 ? 'current' : ''}>2. Ração e revisão</span>
+      </div>
+      <form ref={formRef} onSubmit={(event) => {
+        if (step === 0) {
+          event.preventDefault()
+          if (pond.biometries.some(item => item.id !== initial?.id && item.date === form.date)) {
+            setError('Já existe uma pesagem nesta data. Feche este formulário para editar o registro existente.')
+            return
+          }
+          if (!initial && latest && form.date <= latest.date) {
+            setError('Use uma data posterior à última pesagem.')
+            return
+          }
+          setError(''); setStep(1)
+        } else submit(event)
+      }} className="form-grid simple-biometry-form">
+        {step === 0 ? <>
+        <div className="form-task-intro"><img src="/assets/sample.svg" width="88" height="78" alt="" /><div><h3 data-step-title tabIndex={-1}>Como está a amostra?</h3><p>Pese os camarões juntos e conte quantos foram pesados.</p></div></div>
+        <Field label="Data da pesagem" required>
           <input
             required
             type="date"
@@ -1687,7 +1126,7 @@ function SimpleBiometryForm({
           />
         </Field>
 
-        <h3 className="form-section-title">Amostra</h3>
+
         <div className="two-cols">
           <Field label="Peso total da amostra (g)" required>
             <input
@@ -1717,7 +1156,9 @@ function SimpleBiometryForm({
           <p className="biometry-inline-result">Peso médio <strong>{formatNumber(currentWeightG, 2)} g</strong></p>
         )}
 
-        <h3 className="form-section-title">Ração</h3>
+        </> : <>
+        <div className="weighing-review"><span>Amostra de {formatDate(form.date)}</span><strong>{formatNumber(currentWeightG, 2)} g por camarão</strong><small>{formatNumber(sampleTotalWeightG)} g ÷ {formatNumber(sampleCount)} camarões</small></div>
+        <div className="form-task-heading"><h3 data-step-title tabIndex={-1}>Quanto de ração foi usado?</h3><p>O total do período inclui a ração de hoje.</p></div>
         <Field label="Ração do dia (kg)" required>
           <input
             required
@@ -1770,75 +1211,29 @@ function SimpleBiometryForm({
           </div>
         )}
 
-        <details className="technical-adjustment" open={!tableRate}>
-          <summary>
-            <span>
-              <strong>Taxa de alimentação</strong>
-              <small>
-                {tableRate
-                  ? 'Sugestão por peso'
-                  : 'Informe uma taxa se souber'}
-              </small>
-            </span>
-            <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Sem taxa'}</b>
-          </summary>
+        <details className="technical-adjustment">
+          <summary><span><strong>Simulação de estoque pela ração</strong><small>Opcional • usa uma taxa assumida</small></span><b>{effectiveRate>0?formatNumber(effectiveRate,2)+'%':'Sem taxa'}</b></summary>
           <div className="technical-adjustment-body">
-            <p>{tableRate ? 'Taxa sugerida, não medida.' : 'Peso fora da tabela de referência.'}</p>
-            <Field label="Ajustar taxa manualmente (%)">
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                inputMode="decimal"
-                placeholder={tableRate ? 'Deixe vazio para usar ' + formatNumber(tableRate.ratePercent, 1) + '%' : 'Ex.: 3,5'}
-                value={form.feedRatePercent}
-                onChange={(e) => {
-                  setForm({ ...form, feedRatePercent: e.target.value })
-                  setError('')
-                }}
-              />
-            </Field>
-            <div className="technical-adjustment-actions">
-              {form.feedRatePercent && tableRate && (
-                <button
-                  className="inline-reset-button"
-                  type="button"
-                  onClick={() => {
-                    setForm({ ...form, feedRatePercent: '' })
-                    setError('')
-                  }}
-                >
-                  Usar taxa sugerida
-                </button>
-              )}
-              {form.feedRatePercent && !tableRate && (
-                <button
-                  className="inline-reset-button"
-                  type="button"
-                  onClick={() => {
-                    setForm({ ...form, feedRatePercent: '' })
-                    setError('')
-                  }}
-                >
-                  Remover taxa manual
-                </button>
-              )}
-            </div>
+            <p>Sem espécie, sistema e ração confirmados, o aplicativo não aplica uma taxa automaticamente. Você pode salvar a biometria sem esta simulação.</p>
+            {initial?.feedRatePercent ? <p>Taxa registrada anteriormente: {formatNumber(initial.feedRatePercent,2)}%. Confirme antes de reutilizar.</p>:null}
+            <Field label="Taxa assumida de alimentação (%)"><input type="number" min="0.01" max="100" step="any" inputMode="decimal" placeholder="Informe apenas se conhecer a taxa" value={form.feedRatePercent} onChange={event=>{setForm({...form,feedRatePercent:event.target.value});setError('')}}/></Field>
+            {form.feedRatePercent && <button type="button" className="inline-reset-button" onClick={()=>setForm({...form,feedRatePercent:''})}>Salvar sem taxa</button>}
+            <FeedReferencePanel weightG={currentWeightG}/>
           </div>
         </details>
 
-        {error && <div className="form-error">{error}</div>}
+        </>}
+        {error && <div className="form-error" role="alert">{error}</div>}
 
-        {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+        {step === 1 && preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
           <p className="form-estimate-warning" role="status">
             Estimativas sob revisão. Confira ração e taxa antes de usar esses indicadores.
           </p>
         )}
 
         <div className="modal-actions">
-          <button className="primary-button" type="submit">
-            {initial ? 'Salvar alterações' : 'Salvar biometria'}
-          </button>
+          {step === 1 && <button type="button" className="secondary-button" onClick={() => { setError(''); setStep(0) }}>Voltar</button>}
+          <button className="primary-button" type="submit">{step === 0 ? 'Continuar para ração' : initial ? 'Salvar alterações' : 'Salvar pesagem'}</button>
         </div>
       </form>
     </ModalShell>
@@ -1868,7 +1263,7 @@ function LegacyBiometryEditForm({
   const [form, setForm] = useState({
     date: initial.date,
     currentWeightG: String(initial.currentWeightG),
-    feedRatePercent: String(initial.feedRatePercent),
+    feedRatePercent: initial.feedRatePercent>0 ? String(initial.feedRatePercent) : '',
     dailyFeedKg: String(initial.dailyFeedKg),
     accumulatedFeedKg: String(initial.accumulatedFeedKg),
   })
@@ -1881,7 +1276,8 @@ function LegacyBiometryEditForm({
   const parsed: BiometryInput | null =
     form.date &&
     Number(form.currentWeightG) > 0 &&
-    Number(form.feedRatePercent) > 0 &&
+    Number(form.feedRatePercent) >= 0 &&
+    Number(form.feedRatePercent) <= 100 &&
     Number(form.dailyFeedKg) >= 0 &&
     Number(form.accumulatedFeedKg) >= 0
       ? {
@@ -1895,7 +1291,7 @@ function LegacyBiometryEditForm({
       : null
 
   const preview = parsed
-    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null)
+    ? calculateBiometry(pond, parsed, draftPrevious?.currentWeightG ?? null, draftPrevious?.date)
     : null
   const previewTechnical = preview ? technicalMetricsStatus(pond, preview) : null
 
@@ -1913,7 +1309,8 @@ function LegacyBiometryEditForm({
 
     if (
       Number(form.currentWeightG) <= 0 ||
-      Number(form.feedRatePercent) <= 0 ||
+      Number(form.feedRatePercent) < 0 ||
+      Number(form.feedRatePercent) > 100 ||
       Number(form.dailyFeedKg) < 0 ||
       Number(form.accumulatedFeedKg) < 0
     ) {
@@ -1926,13 +1323,14 @@ function LegacyBiometryEditForm({
       date: form.date,
       currentWeightG: Number(form.currentWeightG),
       feedRatePercent: Number(form.feedRatePercent),
+      feedRateSource: Number(form.feedRatePercent)===initial.feedRatePercent ? initial.feedRateSource : 'manual',
       dailyFeedKg: Number(form.dailyFeedKg),
       accumulatedFeedKg: Number(form.accumulatedFeedKg),
     })
   }
 
   return (
-    <ModalShell title="Editar biometria" subtitle={pond.name + ' · registro histórico'} onClose={onClose}>
+    <ModalShell title="Editar pesagem" subtitle={pond.name + ' · registro histórico'} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         <div className="correction-note historical">
           <strong>Registro antigo</strong>
@@ -1944,6 +1342,7 @@ function LegacyBiometryEditForm({
             required
             type="date"
             min={pond.stockingDate}
+            max={localToday()}
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
           />
@@ -1961,13 +1360,14 @@ function LegacyBiometryEditForm({
               onChange={(e) => setForm({ ...form, currentWeightG: e.target.value })}
             />
           </Field>
-          <Field label="Taxa alimentação (%)" required>
+          <Field label="Taxa assumida (%) — opcional">
             <input
-              required
               type="number"
               min="0.01"
-              step="0.01"
+              max="100"
+              step="any"
               inputMode="decimal"
+              placeholder="Sem taxa"
               value={form.feedRatePercent}
               onChange={(e) => setForm({ ...form, feedRatePercent: e.target.value })}
             />
@@ -2033,9 +1433,30 @@ function ModalShell({
   onClose: () => void
   children: React.ReactNode
 }) {
+  const storageMessage = useContext(StorageMessageContext)
+  const sheetRef = useRef<HTMLElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    sheetRef.current?.focus()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return }
+      if (event.key !== 'Tab') return
+      const controls = Array.from(sheetRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), summary') ?? []).filter(el => el.getClientRects().length > 0)
+      const first = controls[0], last = controls[controls.length - 1]
+      if (!first) { event.preventDefault(); return }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === sheetRef.current)) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === sheetRef.current)) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = overflow; previous?.focus() }
+  }, [])
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="modal-sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={sheetRef} tabIndex={-1} className="modal-sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-handle" />
         <div className="modal-head">
           <div>
@@ -2044,6 +1465,7 @@ function ModalShell({
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
         </div>
+        {storageMessage && <p className="form-error" role="alert">{storageMessage}</p>}
         {children}
       </section>
     </div>

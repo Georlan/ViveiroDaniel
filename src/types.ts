@@ -59,11 +59,16 @@ export type Pond = {
 export type CalculatedBiometry = BiometryInput & {
   cultivationDay: number
   previousWeightG: number | null
-  growthG: number
-  averageGrowthPerWeekG: number
+  growthG: number | null
+  intervalDays: number | null
+  growthPerDayG: number | null
+  averageGrowthPerWeekG: number | null
   feedFor100Kg: number
   survivalPercent: number
   biomassKg: number
-  fca: number
+  /** Não disponível sem ganho independente de biomassa. */
+  fca: null
+  /** Razão apenas para reconciliação do relatório antigo; não é FCA. */
+  feedToStandingBiomassRatio: number | null
   populationAtDate: number
 }

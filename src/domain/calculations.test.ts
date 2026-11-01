@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   accumulatedFeedFromPeriod,
   averageWeightFromSample,
+  biomassFromAnimals,
   calculateHistory,
   compareBiometriesForDisplay,
   densityPerSquareMeter,
@@ -61,6 +62,12 @@ describe('pond calculations', () => {
     expect(v01.reportReferenceDate).toBeNull()
   })
 
+  it('converts the total animal weight from grams to kilograms for a transfer', () => {
+    expect(biomassFromAnimals(1000, 10)).toBe(10)
+    expect(biomassFromAnimals(78000, 3.14)).toBeCloseTo(244.92, 6)
+    expect(biomassFromAnimals(0, 10)).toBe(0)
+  })
+
   it('calculates current static pond facts from the configured data', () => {
     expect(densityPerSquareMeter(v01)).toBe(44)
     expect(preparationDays(v01)).toBe(16)
@@ -109,18 +116,18 @@ describe('pond calculations', () => {
     expect(isFeedPeriodInconsistent(10, 10)).toBe(false)
   })
 
-  it('recalculates a table rate after sample correction, but preserves manual rates', () => {
+  it('keeps stored rates explicit when editing, including legacy table rates', () => {
     const base: BiometryInput = {
       id: 'sample', date: '2026-10-28',
       currentWeightG: 328 / 70, sampleTotalWeightG: 328, sampleCount: 70,
       feedRatePercent: 3.6, dailyFeedKg: 25, periodFeedKg: 152, accumulatedFeedKg: 407,
     }
 
-    expect(manualFeedRateForEdit({ ...base, feedRateSource: 'table' })).toBe('')
-    expect(manualFeedRateForEdit(base)).toBe('') // retrocompatibilidade
+    expect(manualFeedRateForEdit({ ...base, feedRateSource: 'table' })).toBe('3.6')
+    expect(manualFeedRateForEdit(base)).toBe('3.6') // retrocompatibilidade
     expect(manualFeedRateForEdit({ ...base, feedRateSource: 'manual' })).toBe('3.6')
     expect(manualFeedRateForEdit({ ...base, feedRatePercent: 4.5 })).toBe('4.5')
-    expect(manualFeedRateForEdit({ ...base, sampleTotalWeightG: 280, sampleCount: 70, feedRatePercent: 4.1 })).toBe('')
+    expect(manualFeedRateForEdit({ ...base, sampleTotalWeightG: 280, sampleCount: 70, feedRatePercent: 4.1 })).toBe('4.1')
   })
 
   it('does not infer a zero population when no feed was given on that day', () => {
@@ -165,7 +172,7 @@ describe('pond calculations', () => {
     expect(status.isPlausible).toBe(true)
     expect(status.biomassKg).toBeCloseTo(555.56, 1)
     expect(status.survivalPercent).toBeCloseTo(49.13, 1)
-    expect(status.fca).toBeCloseTo(0.1782, 3)
+    expect(status.feedToStandingBiomassRatio).toBeCloseTo(0.1782, 3)
   })
 
   it('distinguishes the field feed table from the different rates in the original report', () => {
@@ -204,7 +211,7 @@ describe('pond calculations', () => {
     expect(32 - (status.feedFor100Kg ?? 0)).toBeCloseTo(0.914, 5)
     expect(status.biomassKg).toBeCloseTo(711.111, 2)
     expect(status.survivalPercent).toBeCloseTo(102.94, 2)
-    expect(status.fca).toBeCloseTo(382 / (32 / 0.045), 4)
+    expect(status.feedToStandingBiomassRatio).toBeCloseTo(382 / (32 / 0.045), 4)
 
     // This only checks the arithmetic boundary. It is NOT an operational feed-rate recommendation.
     const mathematicallyConsistent = technicalMetricsStatus(v01, {
@@ -229,7 +236,7 @@ describe('pond calculations', () => {
     expect(status.isPlausible).toBe(false)
     expect(status.biomassKg).toBeCloseTo(711.11, 2)
     expect(status.survivalPercent).toBeGreaterThan(100)
-    expect(status.fca).toBeCloseTo(0.5372, 3)
+    expect(status.feedToStandingBiomassRatio).toBeCloseTo(0.5372, 3)
   })
 
   it('matches the spreadsheet example without truncating the estimated survival at 100%', () => {
@@ -246,7 +253,7 @@ describe('pond calculations', () => {
     expect(status.survivalPercent).toBeCloseTo(32 / 31.185 * 100, 5)
     expect(round(status.survivalPercent ?? 0)).toBe(103)
     expect(status.biomassKg).toBeCloseTo(711.111, 2)
-    expect(status.fca).toBeCloseTo(382 / (32 / 0.045), 5)
+    expect(status.feedToStandingBiomassRatio).toBeCloseTo(382 / (32 / 0.045), 5)
   })
 
   it('calculates the growth from full precision, not rounded displayed weights', () => {
@@ -381,7 +388,7 @@ describe('pond calculations', () => {
       weightG: 2,
       biomassKg: -85,
       survivalPercentagePoints: -17,
-      fca: 0.47,
+      fca: null,
     })
   })
 
@@ -398,12 +405,13 @@ describe('pond calculations', () => {
 
     history.forEach((row, index) => {
       expect(row.cultivationDay).toBe(expected[index].day)
-      expect(round(row.growthG, 1)).toBe(expected[index].growth)
-      expect(round(row.averageGrowthPerWeekG, 2)).toBe(expected[index].avg)
+      expect(row.growthG===null ? null : round(row.growthG, 1)).toBe(index===0 ? null : expected[index].growth)
+      expect(row.averageGrowthPerWeekG===null ? null : round(row.averageGrowthPerWeekG, 2)).toBe([null,0.1,0.83,0.53,1.87,2][index])
       expect(round(row.survivalPercent)).toBe(expected[index].survival)
       expect(round(row.feedFor100Kg)).toBe(expected[index].feed100)
       expect(round(row.biomassKg)).toBe(expected[index].biomass)
-      expect(round(row.fca, 2)).toBe(expected[index].fca)
+      expect(round(row.feedToStandingBiomassRatio ?? 0, 2)).toBe(expected[index].fca)
+      expect(row.fca).toBeNull()
     })
   })
   it('keeps transferred stock separate from initial population and calculates 15.6 animals/m²', () => {
