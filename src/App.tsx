@@ -540,7 +540,6 @@ export default function App() {
             ponds={ponds}
             onOpen={setSelectedId}
             onAdd={() => setModal({ kind: 'pond' })}
-            onProducts={() => setModal({ kind: 'products' })}
             syncToken={syncToken}
             syncStatus={syncStatus}
             syncMessage={syncMessage}
@@ -587,7 +586,6 @@ function Dashboard({
   ponds,
   onOpen,
   onAdd,
-  onProducts,
   syncToken,
   syncStatus,
   syncMessage,
@@ -600,7 +598,6 @@ function Dashboard({
   ponds: Pond[]
   onOpen: (id: string) => void
   onAdd: () => void
-  onProducts: () => void
   syncToken: string | null
   syncStatus: SyncStatus
   syncMessage: string
@@ -629,35 +626,21 @@ function Dashboard({
         ))}
       </div>
 
-      <SyncPanel
-        connected={Boolean(syncToken)}
-        status={syncStatus}
-        message={syncMessage}
-        updatedAt={syncUpdatedAt}
-        onActivate={onActivateSharing}
-        onCopy={onCopyShareLink}
-        onRefresh={onSyncNow}
-        onDisconnect={onDisconnectSync}
-      />
-      {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
+      <details className="dashboard-settings">
+        <summary>Compartilhamento e histórico</summary>
+        <SyncPanel
+          connected={Boolean(syncToken)}
+          status={syncStatus}
+          message={syncMessage}
+          updatedAt={syncUpdatedAt}
+          onActivate={onActivateSharing}
+          onCopy={onCopyShareLink}
+          onRefresh={onSyncNow}
+          onDisconnect={onDisconnectSync}
+        />
+        {syncToken && <HistoryPanel key={syncToken} syncToken={syncToken} />}
+      </details>
 
-      <article className="product-tracker-card">
-        <div>
-          <span className="eyebrow">Aplicações</span>
-          <strong>Controle de uso de produtos</strong>
-          <p>Consulte os insumos utilizados.</p>
-        </div>
-        <button className="secondary-button" onClick={onProducts}>Registrar uso</button>
-      </article>
-
-      <div className="storage-note">
-        <strong>{syncToken ? 'Fonte compartilhada ativa' : 'Dados salvos neste aparelho'}</strong>
-        <span>
-          {syncToken
-            ? 'O navegador mantém uma cópia local, mas a versão canônica fica na fonte compartilhada.'
-            : 'Sem compartilhamento, cada aparelho possui sua própria cópia local.'}
-        </span>
-      </div>
     </section>
   )
 }
@@ -683,48 +666,27 @@ function SyncPanel({
 }) {
   if (!connected) {
     return (
-      <article className="sync-card">
-        <div className="sync-card-copy">
-          <span className="eyebrow">Dois aparelhos</span>
-          <strong>Usar a mesma fonte de dados</strong>
-          <p>
-            Ative o compartilhamento para o dono e o irmão abrirem o mesmo link e editarem a mesma base.
-          </p>
-          {message && <small className="sync-message">{message}</small>}
-        </div>
-        <button
-          className="secondary-button sync-primary-action"
-          onClick={onActivate}
-          disabled={status === 'connecting' || status === 'syncing'}
-        >
-          {status === 'connecting' ? 'Ativando…' : 'Ativar grátis'}
+      <div className="sync-minimal">
+        <p>Os dados ficam neste aparelho. Ative para usar a mesma base em outros dispositivos.</p>
+        {message && <small role="status" className="sync-message">{message}</small>}
+        <button className="secondary-button" onClick={onActivate}
+          disabled={status === 'connecting' || status === 'syncing'}>
+          {status === 'connecting' ? 'Ativando…' : 'Ativar compartilhamento'}
         </button>
-      </article>
+      </div>
     )
   }
 
   return (
-    <article className={'sync-card connected ' + (status === 'error' ? 'has-error' : '')}>
-      <div className="sync-card-copy">
-        <div className="sync-title-row">
-          <span className="eyebrow">Fonte compartilhada</span>
-          <span className={'sync-dot ' + status} />
-        </div>
-        <strong>{syncStatusLabel(status)}</strong>
-        <p>
-          As alterações salvas aqui são a fonte canônica para todos os aparelhos que possuem o link.
-        </p>
-        {updatedAt && (
-          <small>Última versão: {new Date(updatedAt).toLocaleString('pt-BR')}</small>
-        )}
-        {message && <small className="sync-message">{message}</small>}
-      </div>
+    <div className={'sync-minimal' + (status === 'error' ? ' has-error' : '')}>
+      <p>{syncStatusLabel(status)}{updatedAt ? ' · ' + new Date(updatedAt).toLocaleString('pt-BR') : ''}</p>
+      {message && <small role="status" className="sync-message">{message}</small>}
       <div className="sync-actions">
         <button className="secondary-button" onClick={onCopy}>Copiar link</button>
-        <button className="sync-text-button" onClick={onRefresh}>Atualizar</button>
-        <button className="sync-text-button danger" onClick={onDisconnect}>Só neste aparelho</button>
+        <button className="secondary-button" onClick={onRefresh}>Atualizar</button>
+        <button className="sync-text-button danger" onClick={onDisconnect}>Usar só neste aparelho</button>
       </div>
-    </article>
+    </div>
   )
 }
 
@@ -882,7 +844,7 @@ function PondCard({
   )
 }
 
-function PondDetail({
+export function PondDetail({
   pond,
   onTransfer,
   onAddBiometry,
@@ -901,47 +863,26 @@ function PondDetail({
   const latest = history[history.length - 1]
   const today = localToday()
   const cultivationDays = Math.max(0, daysBetween(pond.stockingDate, today))
-  const cycleDays = Math.max(0, daysBetween(pond.cycleStartDate, today))
   const balance = populationBalanceAtDate(pond, today)
   const populationInControl = balance.population
   const latestTechnical = latest ? technicalMetricsStatus(pond, latest) : null
   const latestFeedMismatch = latest?.periodFeedKg != null &&
     isFeedPeriodInconsistent(latest.dailyFeedKg, latest.periodFeedKg)
-  const productCatalog = aggregateProductUsages(
-    pond.productUsages ?? [],
-    localToday().slice(0, 7),
-  )
 
   return (
     <section className="page detail-page">
       <div className="pond-header-card">
         <div className="pond-header-top">
-          <span className="hero-kicker"><UiIcon name="water" /> Em produção</span>
-          <span className={latest ? 'status ready' : 'status waiting'}>
-            {latest ? 'Com biometria' : 'Sem biometria'}
-          </span>
+          <span className="hero-kicker">Dia {cultivationDays} de cultivo</span>
         </div>
         <div className="pond-density-hero">
           <span>Densidade no controle</span>
           <strong>{formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1)} <em>animais/m²</em></strong>
         </div>
         <p className="pond-header-meta">
-          {formatAreaSquareMeters(pond.areaHa)} m² <span aria-hidden="true">·</span> {formatNumber(populationInControl)} animais <span aria-hidden="true">·</span> {pond.laboratory || 'Laboratório não informado'}
+          {formatNumber(populationInControl)} animais · {formatAreaSquareMeters(pond.areaHa)} m²
         </p>
-        <div className="pond-header-badges">
-          <span className="info-chip"><UiIcon name="calendar" /> {cultivationDays} dias de cultivo</span>
-          <span className="info-chip">{cycleDays} dias de ciclo</span>
-        </div>
       </div>
-
-      {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
-        <details className="balance-detail">
-          <summary>Como foi calculada a população?</summary>
-          <p>{formatNumber(balance.initialPopulation)} iniciais + {formatNumber(balance.incomingAnimals)} recebidos − {formatNumber(balance.outgoingAnimals)} transferidos = <strong>{formatNumber(populationInControl)} animais</strong>.</p>
-          <p>Entradas registradas por transferência não devem ser somadas novamente na população inicial.</p>
-          <button className="text-button" onClick={onEditPond}>Conferir cadastro</button>
-        </details>
-      )}
 
       <div className="operational-actions">
         <button className="primary-button operational-primary" onClick={onAddBiometry}>
@@ -952,10 +893,7 @@ function PondDetail({
             <UiIcon name="transfer" /> <span>Transferir</span>
           </button>
           <button className="secondary-button" onClick={onProducts}>
-            <UiIcon name="product" /> <span>Usar produto</span>
-          </button>
-          <button className="secondary-button" onClick={onEditPond}>
-            <UiIcon name="edit" /> <span>Editar viveiro</span>
+            <UiIcon name="product" /> <span>Produtos</span>
           </button>
         </div>
       </div>
@@ -968,7 +906,7 @@ function PondDetail({
               <p>Dia {latest.cultivationDay} · {formatDate(latest.date)}</p>
             </div>
             <button className="text-button" onClick={() => onEditBiometry(latest.id)}>
-              <UiIcon name="edit" /> Editar
+              Editar
             </button>
           </div>
 
@@ -978,87 +916,60 @@ function PondDetail({
             <Metric label="Cresc. médio" value={latest.previousWeightG === null ? '—' : formatNumber(round(latest.averageGrowthPerWeekG, 2), 2) + ' g/sem'} />
           </div>
 
-          {latestFeedMismatch ? (
+          {(latestFeedMismatch || (latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible)) && (
             <div className="feed-integrity-callout" role="alert">
               <UiIcon name="warning" />
-              <div className="review-copy">
-                <strong>Conferir ração</strong>
-                <span>O total do período está menor que o de um dia.</span>
-                <details>
-                  <summary>Entender o alerta</summary>
-                  <p>Dia: {formatNumber(latest.dailyFeedKg)} kg. Período: {formatNumber(latest.periodFeedKg ?? 0)} kg. Confira se os valores foram invertidos.</p>
-                </details>
-              </div>
+              <span>{latestFeedMismatch ? 'Conferir ração do período' : 'Estimativas sob revisão'}</span>
               <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>Revisar</button>
             </div>
-          ) : latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible ? (
-            <div className="feed-integrity-callout" role="status">
-              <UiIcon name="warning" />
-              <div className="review-copy">
-                <strong>Revisar estimativas</strong>
-                <span>Ração acima da referência calculada.</span>
-                <details>
-                  <summary>Entender o alerta</summary>
-                  <p>{formatNumber(latest.dailyFeedKg)} kg/dia informados; referência de {formatNumber(latestTechnical.feedFor100Kg ?? 0, 2)} kg/dia, considerando taxa de {formatNumber(latest.feedRatePercent, 1)}%. Confira ração, taxa e população antes de validar biomassa, sobrevivência e FCA.</p>
-                </details>
-              </div>
-              <button type="button" className="secondary-button" onClick={() => onEditBiometry(latest.id)}>Revisar</button>
-            </div>
-          ) : null}
+          )}
 
           <details className="detail-disclosure field-disclosure">
-            <summary>Dados da coleta <span>Ver registros</span></summary>
+            <summary>Dados da biometria</summary>
             <div className="field-metrics">
               {latest.sampleTotalWeightG != null && latest.sampleCount != null ? (
                 <>
                   <Metric label="Peso da amostra" value={formatNumber(latest.sampleTotalWeightG) + ' g'} />
                   <Metric label="Amostra" value={formatNumber(latest.sampleCount) + ' animais'} />
-                  <Metric label="Ração por dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
+                  <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
                   <Metric label="Ração no período" value={formatNumber(latest.periodFeedKg ?? 0) + ' kg'} />
                 </>
               ) : (
                 <>
-                  <Metric label="Peso no relatório" value={formatNumber(latest.currentWeightG, 2) + ' g'} />
                   <Metric label="Taxa de alimentação" value={formatNumber(latest.feedRatePercent, 1) + '%'} />
-                  <Metric label="Ração por dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
-                  <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
+                  <Metric label="Ração/dia" value={formatNumber(latest.dailyFeedKg) + ' kg'} />
                 </>
               )}
-            </div>
-          </details>
-
-          <details className="detail-disclosure metrics-disclosure">
-            <summary>Indicadores calculados <span>{latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? 'Ver estimativas' : 'Sob revisão'}</span></summary>
-            <div className="field-metrics">
               <Metric label="Ração acumulada" value={formatNumber(latest.accumulatedFeedKg) + ' kg'} />
-              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible ? (
+              {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && (
                 <>
                   <Metric label="Biomassa est." value={calculatedMetric(latestTechnical, 'biomassKg')} />
                   <Metric label="Sobrev. est." value={calculatedMetric(latestTechnical, 'survivalPercent')} />
                   <Metric label="FCA est." value={calculatedMetric(latestTechnical, 'fca')} />
-                  <Metric label="Ração p/100%" value={formatNumber(round(latestTechnical.feedFor100Kg ?? 0)) + ' kg'} />
                 </>
-              ) : (
-                <p className="technical-inline-note">
-                  {!latestTechnical?.hasFeedRate
-                    ? 'Sem taxa de alimentação para estimar.'
-                    : !latestTechnical?.hasCalculatedValues
-                      ? 'Sem dados suficientes para estimar.'
-                      : 'Biomassa, sobrevivência e FCA indisponíveis até revisar a ração e a taxa.'}
-                </p>
               )}
             </div>
-            {latestTechnical?.hasCalculatedValues && latestTechnical.fca === null && (
+            {latestFeedMismatch ? (
+              <p className="technical-inline-note">
+                O período ({formatNumber(latest.periodFeedKg ?? 0)} kg) é menor que a ração de um dia ({formatNumber(latest.dailyFeedKg)} kg).
+              </p>
+            ) : latestTechnical?.hasCalculatedValues && !latestTechnical.isPlausible ? (
+              <p className="technical-inline-note">
+                {formatNumber(latest.dailyFeedKg)} kg/dia superam a referência de {formatNumber(latestTechnical.feedFor100Kg ?? 0, 2)} kg/dia com taxa de {formatNumber(latest.feedRatePercent, 1)}%. Confira os dados antes de usar biomassa, sobrevivência e FCA.
+              </p>
+            ) : !latestTechnical?.hasCalculatedValues ? (
+              <p className="technical-inline-note">Sem dados suficientes para estimar biomassa, sobrevivência e FCA.</p>
+            ) : null}
+            {latestTechnical?.hasCalculatedValues && latestTechnical.isPlausible && latestTechnical.fca === null && (
               <p className="technical-inline-note">FCA indisponível após transferência sem ração por lote.</p>
             )}
-            <p className="estimate-footnote">Estimativas dependem da taxa de alimentação; não substituem contagem.</p>
+            <p className="estimate-footnote">Biomassa e sobrevivência são estimativas baseadas na taxa de alimentação.</p>
           </details>
         </section>
       ) : (
         <div className="empty-card">
-          <div className="empty-icon"><UiIcon name="water" /></div>
-          <h2>Aguardando primeira biometria</h2>
-          <p>Registre uma amostra para começar a acompanhar o viveiro.</p>
+          <h2>Sem biometria</h2>
+          <p>Registre a primeira amostra.</p>
         </div>
       )}
 
@@ -1066,7 +977,7 @@ function PondDetail({
 
       {(pond.populationMovements ?? []).length > 0 && (
         <details className="pond-extra-details movement-history">
-          <summary>Transferências <span>{(pond.populationMovements ?? []).length} registros</span></summary>
+          <summary>Transferências</summary>
           <div className="movement-list">
             {[...(pond.populationMovements ?? [])].sort((a, b) => b.date.localeCompare(a.date)).map((movement) => (
               <div className="movement-row" key={movement.transferId}>
@@ -1078,40 +989,25 @@ function PondDetail({
         </details>
       )}
 
-      <div className="product-summary-card">
-        <div>
-          <span className="eyebrow">Insumos</span>
-          <strong>Produtos</strong>
-          <p>{productCatalog.length} produtos · {(pond.productUsages ?? []).length} usos</p>
-        </div>
-        <button className="secondary-button" onClick={onProducts}>Ver produtos</button>
-      </div>
-
       <details className="pond-extra-details">
-        <summary>Dados do viveiro <span>Ver cadastro</span></summary>
+        <summary>Dados do viveiro</summary>
         <div className="facts-grid">
-        <Fact label="Densidade no controle" value={formatNumber(round(densityPerSquareMeter(pond, populationInControl), 1), 1) + ' animais/m²'} />
-        <Fact label="Área" value={formatAreaSquareMeters(pond.areaHa) + ' m²'} />
-        <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
-        <Fact label="Área equivalente" value={formatNumber(pond.areaHa, 2) + ' ha'} />
-        <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
-        <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
-        <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
-        <Fact label="Ciclo" value={String(pond.cycle)} />
-        <Fact label="Laboratório" value={pond.laboratory || '—'} />
-        <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
-        <Fact label="Raçoador" value={pond.feeder || '—'} />
+          <Fact label="Área" value={formatAreaSquareMeters(pond.areaHa) + ' m²'} />
+          <Fact label="População inicial" value={formatNumber(pond.initialPopulation)} />
+          <Fact label="Povoamento" value={formatDate(pond.stockingDate)} />
+          <Fact label="Início do ciclo" value={formatDate(pond.cycleStartDate)} />
+          <Fact label="Dias de preparo" value={preparationDays(pond) + ' dias'} />
+          <Fact label="Ciclo" value={String(pond.cycle)} />
+          <Fact label="Laboratório" value={pond.laboratory || '—'} />
+          <Fact label="PL/g" value={pond.plPerGram === null ? '—' : formatNumber(pond.plPerGram)} />
+          <Fact label="Raçoador" value={pond.feeder || '—'} />
         </div>
+        {(balance.incomingAnimals > 0 || balance.outgoingAnimals > 0) && (
+          <p className="balance-caption">
+            Saldo: {formatNumber(balance.initialPopulation)} + {formatNumber(balance.incomingAnimals)} − {formatNumber(balance.outgoingAnimals)} = {formatNumber(populationInControl)} animais.
+          </p>
+        )}
         <button className="secondary-button" onClick={onEditPond}>Editar cadastro</button>
-      </details>
-      <details className="calculation-details">
-        <summary>Como o app calcula os indicadores?</summary>
-        <p>
-          Em cada biometria, você informa a amostra, a ração do dia e a ração fornecida no período.
-          Peso médio e ração acumulada vêm dos registros. Biomassa, sobrevivência estimada e FCA
-          são calculados a partir da taxa de alimentação e da ração diária.
-          A sobrevivência exibida é uma estimativa matemática, não uma contagem dos animais.
-        </p>
       </details>
     </section>
   )
@@ -1126,46 +1022,46 @@ function HistorySection({
 }) {
   const [showAll, setShowAll] = useState(false)
   const history = calculateHistory(pond)
-  if (!history.length) return null
+  if (history.length < 2) return null
 
-  const recent = [...history].reverse()
+  // A última medição já aparece acima, com acesso à edição.
+  const recent = history.slice(0, -1).reverse()
   const visible = showAll ? recent : recent.slice(0, 3)
 
   return (
     <section className="biometry-history" aria-label="Histórico de biometrias">
       <div className="section-heading history-heading">
-        <div>
-          <h2>Biometrias recentes</h2>
-          <p>{history.length} {history.length === 1 ? 'registro' : 'registros'}</p>
-        </div>
-        {history.length > 3 && (
+        <h2>Biometrias anteriores</h2>
+        {recent.length > 3 && (
           <button className="text-button" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
-            {showAll ? 'Ver menos' : 'Ver todas'} <span aria-hidden="true">→</span>
+            {showAll ? 'Ver menos' : 'Ver todas'}
           </button>
         )}
       </div>
       <div className="history-list">
         {visible.map((row) => {
           const technical = technicalMetricsStatus(pond, row)
-          const hasFeedMismatch = row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)
-          const needsReview = hasFeedMismatch || (technical.hasCalculatedValues && !technical.isPlausible)
+          const needsReview = (row.periodFeedKg != null && isFeedPeriodInconsistent(row.dailyFeedKg, row.periodFeedKg)) ||
+            (technical.hasCalculatedValues && !technical.isPlausible)
           return (
             <article className="history-card" key={row.id}>
               <div className="history-date">
-                <UiIcon name="calendar" />
                 <strong>Dia {row.cultivationDay}</strong>
                 <span>{formatDate(row.date)}</span>
               </div>
               <div className="history-values">
-                <span className="history-weight"><strong>{formatNumber(row.currentWeightG, 2)} g</strong><small>Peso</small></span>
-                <span><strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong><small>Ganho</small></span>
-                <span><strong>{row.previousWeightG === null ? '—' : formatNumber(round(row.averageGrowthPerWeekG, 2), 2) + ' g/sem'}</strong><small>Cresc. médio</small></span>
+                <span className="history-weight">
+                  <strong>{formatNumber(row.currentWeightG, 2)} g</strong>
+                  <small>Peso</small>
+                </span>
+                <span>
+                  <strong>{row.previousWeightG === null ? '—' : formatSigned(round(row.growthG, 2), 2) + ' g'}</strong>
+                  <small>Ganho</small>
+                </span>
               </div>
-              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Revisar ração e taxa</span>}
+              {needsReview && <span className="history-alert"><UiIcon name="warning" /> Ração</span>}
               <button className="history-edit-button" onClick={() => onEditBiometry(row.id)}
-                aria-label={'Editar biometria do dia ' + row.cultivationDay}>
-                Editar
-              </button>
+                aria-label={'Editar biometria do dia ' + row.cultivationDay}>Editar</button>
             </article>
           )
         })}
@@ -1247,12 +1143,12 @@ function TransferForm({
   }
 
   return (
-    <ModalShell title="Transferir camarões" subtitle="Registre a saída e a entrada no mesmo movimento." onClose={onClose}>
+    <ModalShell title="Transferir camarões" subtitle={source.name} onClose={onClose}>
       {targets.length === 0 ? (
         <div className="empty-card">
           <h2>Falta o viveiro de destino</h2>
           <p>Cadastre outro viveiro para registrar a transferência.</p>
-          <button type="button" className="secondary-button" onClick={onClose}>Fechar</button>
+          
         </div>
       ) : (
         <form onSubmit={submit} className="form-grid">
@@ -1270,22 +1166,21 @@ function TransferForm({
           </Field>
           <Field label="Quantidade de camarões" required>
             <input required type="number" min="1" step="1" inputMode="numeric" value={animals} onChange={(event) => setAnimals(event.target.value)} />
-            <small>Disponíveis no controle de {source.name}: {formatNumber(sourcePopulation)}</small>
+            <small>Disponíveis: {formatNumber(sourcePopulation)}</small>
           </Field>
           <Field label="Peso médio transferido (g)" required>
             <input required type="number" min="0.01" step="any" inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} />
-            <small>Pré-preenchido pela última biometria de {source.name}; ajuste se o lote transferido tiver outro peso.</small>
+            
           </Field>
           {count > 0 && target && Number.isFinite(averageWeightG) && averageWeightG > 0 && (
             <div className="transfer-preview">
               <strong>{formatNumber(biomassKg, 3)} kg de biomassa estimada</strong>
               <span>{formatNumber(sourcePopulation - count)} animais ficam em {source.name} · {formatNumber(targetPopulation + count)} passam ao controle de {target.name}</span>
-              <small>Estimativa calculada pela quantidade × peso médio. O peso do destino será confirmado na próxima biometria.</small>
+              
             </div>
           )}
           {error && <div className="form-error" role="alert">{error}</div>}
           <div className="modal-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
             <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Registrar transferência'}</button>
           </div>
         </form>
@@ -1356,17 +1251,11 @@ function PondForm({
 
   return (
     <ModalShell
-      title={initial ? 'Editar dados do viveiro' : 'Novo viveiro'}
-      subtitle={initial ? 'Dados iniciais e população do lote.' : 'Cadastre os dados palpáveis do lote.'}
+      title={initial ? 'Editar viveiro' : 'Novo viveiro'}
+      subtitle=""
       onClose={onClose}
     >
       <form onSubmit={submit} className="form-grid">
-        {initial && (
-          <div className="correction-note">
-            <strong>Dados iniciais editáveis</strong>
-            <span>Alterações aqui atualizam os indicadores do viveiro.</span>
-          </div>
-        )}
         <Field label="Nome" required><input required placeholder="Ex.: V03" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <div className="two-cols">
           <Field label="Área do viveiro (m²)" required><input required type="number" min="0.01" step="any" inputMode="decimal" value={form.areaSquareMeters} onChange={(e) => setForm({ ...form, areaSquareMeters: e.target.value })} /></Field>
@@ -1379,22 +1268,15 @@ function PondForm({
           <div className="pond-form-density-preview" role="status">
             <span>{movementBalance ? 'Densidade do saldo com transferências' : 'Densidade inicial cadastrada'}</span>
             <strong>{formatNumber(round(draftDensity, 1), 1)} animais/m²</strong>
-            {movementBalance ? (
-              <small>
-                {formatNumber(initialAnimals)} iniciais + {formatNumber(movementBalance.incomingAnimals)} entradas − {formatNumber(movementBalance.outgoingAnimals)} saídas
-                = {formatNumber(movementBalance.population)} animais. Não indica sobrevivência real.
-              </small>
-            ) : (
-              <small>Calculada pela população inicial e pela área; não indica sobrevivência real.</small>
-            )}
+
           </div>
         )}
         {movementBalance && movementBalance.incomingAnimals > 0 && initialAnimals > 0 && (
           <div className="correction-note">
-            <strong>Confira se a entrada foi contada duas vezes</strong>
-            <span>A população inicial não deve incluir os {formatNumber(movementBalance.incomingAnimals)} camarões já registrados como recebidos por transferência.</span>
+            <strong>Possível duplicidade</strong>
+            <span>{formatNumber(movementBalance.incomingAnimals)} animais já entraram por transferência.</span>
             <button type="button" className="secondary-button" onClick={() => setForm({ ...form, initialPopulation: '0' })}>
-              Usar somente as transferências como população de entrada
+              Zerar população inicial
             </button>
           </div>
         )}
@@ -1408,8 +1290,7 @@ function PondForm({
           <Field label="PL/g"><input type="number" min="0" step="any" inputMode="decimal" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">{initial ? 'Salvar dados' : 'Criar viveiro'}</button>
+          <button className="primary-button" type="submit">{initial ? 'Salvar alterações' : 'Criar viveiro'}</button>
         </div>
       </form>
     </ModalShell>
@@ -1488,15 +1369,8 @@ function ProductUsageForm({
   }
 
   return (
-    <ModalShell title="Produtos" subtitle="Consumo acumulado do viveiro." onClose={onClose}>
+    <ModalShell title="Produtos" subtitle="" onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
-        <div className="correction-note">
-          <strong>O produto é cadastrado no primeiro uso</strong>
-          <span>
-            Depois disso, cada novo uso soma ao mesmo produto. A tela mostra o total consumido e o consumo do mês para ajudar a planejar a próxima compra.
-          </span>
-        </div>
-
         <div className="two-cols">
           <Field label="Viveiro" required>
             <select
@@ -1530,13 +1404,6 @@ function ProductUsageForm({
           <datalist id="registered-products">
             {registeredNames.map((name) => <option key={name} value={name} />)}
           </datalist>
-          <small>
-            {findRegisteredProduct(usages, form.product)
-              ? 'Produto já cadastrado. Este uso será somado ao total existente.'
-              : form.product.trim()
-                ? 'Novo produto: ele será cadastrado automaticamente ao salvar o primeiro uso.'
-                : 'Produtos já cadastrados aparecem como sugestão.'}
-          </small>
         </Field>
 
         <div className="two-cols">
@@ -1575,58 +1442,52 @@ function ProductUsageForm({
         {error && <div className="form-error">{error}</div>}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">Somar uso</button>
+          <button className="primary-button" type="submit">Registrar uso</button>
         </div>
 
-        <div className="usage-period-head product-catalog-head">
-          <div>
-            <span className="eyebrow">Produtos cadastrados</span>
-            <strong>Consumo acumulado</strong>
-          </div>
-          <input
-            className="month-input"
-            type="month"
-            value={form.month}
-            onChange={(e) => setForm({ ...form, month: e.target.value })}
-          />
-        </div>
-
-        {products.length ? (
-          <div className="product-catalog">
-            {products.map((product) => (
-              <article className="product-consumption-card" key={product.key}>
-                <div className="product-consumption-head">
-                  <div>
-                    <strong>{product.product}</strong>
-                    <span>{product.uses} {product.uses === 1 ? 'uso registrado' : 'usos acumulados'}</span>
+        <details className="product-consumption-details">
+          <summary>Ver consumo ({products.length})</summary>
+          <div className="usage-period-head product-catalog-head">
+                    <strong>Consumo</strong>
+                    <input
+                      className="month-input"
+                      type="month"
+                      value={form.month}
+                      onChange={(e) => setForm({ ...form, month: e.target.value })}
+                    />
                   </div>
-                  <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
-                </div>
-
-                <div className="product-consumption-metrics">
-                  <div>
-                    <span>Usado no mês</span>
-                    <strong>{formatProductUsageAmount(product.monthBase, product.dimension)}</strong>
-                  </div>
-                  <div>
-                    <span>Último uso</span>
-                    <strong>{formatDate(product.lastDate)}</strong>
-                  </div>
-                </div>
-
-                <small className="purchase-reference">
-                  O consumo do mês é a referência rápida para planejar a reposição deste produto.
-                </small>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-inline">
-            <strong>Nenhum produto cadastrado ainda.</strong>
-            <span>O primeiro uso cria o produto automaticamente.</span>
-          </div>
-        )}
+          
+                  {products.length ? (
+                    <div className="product-catalog">
+                      {products.map((product) => (
+                        <article className="product-consumption-card" key={product.key}>
+                          <div className="product-consumption-head">
+                            <div>
+                              <strong>{product.product}</strong>
+          
+                            </div>
+                            <b>{formatProductUsageAmount(product.totalBase, product.dimension)}</b>
+                          </div>
+          
+                          <div className="product-consumption-metrics">
+                            <div>
+                              <span>Usado no mês</span>
+                              <strong>{formatProductUsageAmount(product.monthBase, product.dimension)}</strong>
+                            </div>
+                            <div>
+                              <span>Último uso</span>
+                              <strong>{formatDate(product.lastDate)}</strong>
+                            </div>
+                          </div>
+          
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="empty-inline">Nenhum uso registrado.</p>
+                  )}
+          
+        </details>
       </form>
     </ModalShell>
   )
@@ -1811,7 +1672,7 @@ function SimpleBiometryForm({
   return (
     <ModalShell
       title={initial ? 'Editar biometria' : 'Registrar biometria'}
-      subtitle={pond.name + ' · modo simples'}
+      subtitle={pond.name}
       onClose={onClose}
     >
       <form onSubmit={submit} className="form-grid simple-biometry-form">
@@ -1852,10 +1713,8 @@ function SimpleBiometryForm({
           </Field>
         </div>
 
-        {currentWeightG > 0 && Number.isInteger(sampleCount) && !preview && (
-          <p className="biometry-inline-result">
-            Peso médio: <strong>{formatNumber(currentWeightG, 2)} g</strong>
-          </p>
+        {currentWeightG > 0 && Number.isInteger(sampleCount) && sampleCount > 0 && (
+          <p className="biometry-inline-result">Peso médio <strong>{formatNumber(currentWeightG, 2)} g</strong></p>
         )}
 
         <h3 className="form-section-title">Ração</h3>
@@ -1869,12 +1728,11 @@ function SimpleBiometryForm({
             value={form.dailyFeedKg}
             onChange={(e) => setForm({ ...form, dailyFeedKg: e.target.value })}
           />
-          <small>Total fornecido em um único dia.</small>
         </Field>
         <Field
           label={
             draftPrevious
-              ? 'Ração desde a última biometria (kg)'
+              ? 'Ração no período (kg)'
               : 'Ração desde o povoamento (kg)'
           }
           required
@@ -1888,18 +1746,13 @@ function SimpleBiometryForm({
             value={form.periodFeedKg}
             onChange={(e) => setForm({ ...form, periodFeedKg: e.target.value })}
           />
-          <small>Soma dos dias desde a última biometria, incluindo o dia deste registro.</small>
+          <small>{draftPrevious ? 'Desde a última biometria, incluindo hoje.' : 'Total desde o povoamento, incluindo hoje.'}</small>
         </Field>
 
         {form.dailyFeedKg.trim() && form.periodFeedKg.trim() &&
           isFeedPeriodInconsistent(Number(form.dailyFeedKg), periodFeedKg) && (
           <div className="feed-entry-review" role="alert">
-            <strong>Os valores de ração não fecham</strong>
-            <p>
-              Você informou {formatNumber(periodFeedKg)} kg para todo o período,
-              mas {formatNumber(Number(form.dailyFeedKg))} kg em um único dia.
-              Verifique se os campos foram invertidos.
-            </p>
+            <strong>Ração do período menor que a do dia.</strong>
             <button
               type="button"
               className="secondary-button"
@@ -1912,7 +1765,7 @@ function SimpleBiometryForm({
                 setError('')
               }}
             >
-              Trocar valores de ração
+              Inverter valores
             </button>
           </div>
         )}
@@ -1923,17 +1776,14 @@ function SimpleBiometryForm({
               <strong>Taxa de alimentação</strong>
               <small>
                 {tableRate
-                  ? 'Referência por peso · toque para ajustar'
-                  : 'Sem referência · informe se souber'}
+                  ? 'Sugestão por peso'
+                  : 'Informe uma taxa se souber'}
               </small>
             </span>
             <b>{effectiveRate > 0 ? formatNumber(effectiveRate, 1) + '%' : 'Sem taxa'}</b>
           </summary>
           <div className="technical-adjustment-body">
-            <p>{tableRate
-              ? 'Taxa sugerida pela tabela, não medida. Ajuste só se souber a taxa do manejo.'
-              : 'Peso fora da tabela (0,2 a 30 g). Informe a taxa se souber.'}
-            </p>
+            <p>{tableRate ? 'Taxa sugerida, não medida.' : 'Peso fora da tabela de referência.'}</p>
             <Field label="Ajustar taxa manualmente (%)">
               <input
                 type="number"
@@ -1958,7 +1808,7 @@ function SimpleBiometryForm({
                     setError('')
                   }}
                 >
-                  Voltar para taxa da tabela ({formatNumber(tableRate.ratePercent, 1)}%)
+                  Usar taxa sugerida
                 </button>
               )}
               {form.feedRatePercent && !tableRate && (
@@ -1979,51 +1829,15 @@ function SimpleBiometryForm({
 
         {error && <div className="form-error">{error}</div>}
 
-        {preview && (
-          <div className="preview-card auto-preview-card">
-            <span className="eyebrow">Resumo da biometria</span>
-            <div className="preview-grid">
-              <Metric label="Peso médio" value={formatNumber(preview.currentWeightG, 2) + ' g'} />
-              {preview.previousWeightG === null ? (
-                <Metric label="Comparação" value="Linha de base" />
-              ) : (
-                <Metric label="Ganho desde anterior" value={formatSigned(preview.growthG, 2) + ' g'} />
-              )}
-              <Metric label="Ração acumulada" value={formatNumber(preview.accumulatedFeedKg) + ' kg'} />
-            </div>
-
-            {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
-              <details className="biometry-extra-metrics">
-                <summary>Ver estimativas técnicas</summary>
-                <div className="preview-grid">
-                  <Metric label="Biomassa est." value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
-                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
-                  <Metric label="FCA est." value={calculatedMetric(previewTechnical, 'fca')} />
-                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-                </div>
-                <small>Estimativas com taxa de alimentação de {formatNumber(preview.feedRatePercent, 1)}%.</small>
-              </details>
-            )}
-
-            {!previewTechnical?.hasCalculatedValues && (
-              <p className="technical-inline-note">
-                {!previewTechnical?.hasFeedRate ? 'Falta taxa de alimentação.' : 'Sem ração no dia para estimar.'}
-              </p>
-            )}
-            {previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
-              <p className="technical-inline-note warning-note">
-                A ração de {formatNumber(preview.dailyFeedKg)} kg/dia supera a referência de {formatNumber(previewTechnical.feedFor100Kg ?? 0, 2)} kg/dia
-                na taxa de {formatNumber(preview.feedRatePercent, 1)}%. Confira a hipótese; as estimativas não são válidas.
-              </p>
-            )}
-
-          </div>
+        {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+          <p className="form-estimate-warning" role="status">
+            Estimativas sob revisão. Confira ração e taxa antes de usar esses indicadores.
+          </p>
         )}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
           <button className="primary-button" type="submit">
-            {initial ? 'Salvar correção' : 'Salvar biometria'}
+            {initial ? 'Salvar alterações' : 'Salvar biometria'}
           </button>
         </div>
       </form>
@@ -2121,11 +1935,8 @@ function LegacyBiometryEditForm({
     <ModalShell title="Editar biometria" subtitle={pond.name + ' · registro histórico'} onClose={onClose}>
       <form onSubmit={submit} className="form-grid">
         <div className="correction-note historical">
-          <strong>Registro importado do relatório</strong>
-          <span>
-            Este registro antigo não possui peso total da amostra nem ração do período salvos.
-            Por isso a correção usa os campos existentes no relatório. Os cálculos dependentes serão refeitos.
-          </span>
+          <strong>Registro antigo</strong>
+          <span>Edite os campos disponíveis no relatório original.</span>
         </div>
 
         <Field label="Data da biometria" required>
@@ -2190,26 +2001,12 @@ function LegacyBiometryEditForm({
 
         {error && <div className="form-error">{error}</div>}
 
-        {preview && (
-          <div className="preview-card auto-preview-card">
-            <span className="eyebrow">Resultado após a correção</span>
-            <div className="preview-grid">
-              <Metric label="Crescimento" value={formatSigned(preview.growthG, 2) + ' g'} />
-              {previewTechnical?.hasCalculatedValues && previewTechnical.isPlausible && (
-                <>
-                  <Metric label="Biomassa" value={formatNumber(round(previewTechnical.biomassKg ?? 0)) + ' kg'} />
-                  <Metric label="Sobrevivência est." value={formatNumber(round(previewTechnical.survivalPercent ?? 0)) + '%'} />
-                  <Metric label="Ração p/100%" value={formatNumber(round(previewTechnical.feedFor100Kg ?? 0)) + ' kg'} />
-                  <Metric label="FCA" value={formatNumber(round(previewTechnical.fca ?? 0, 2), 2)} />
-                </>
-              )}
-            </div>
-          </div>
+        {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
+          <p className="form-estimate-warning" role="status">Estimativas sob revisão. Confira ração e taxa.</p>
         )}
 
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="submit">Salvar correção</button>
+          <button className="primary-button" type="submit">Salvar alterações</button>
         </div>
       </form>
     </ModalShell>
@@ -2242,7 +2039,7 @@ function ModalShell({
         <div className="modal-handle" />
         <div className="modal-head">
           <div>
-            <span className="eyebrow">{subtitle}</span>
+            {subtitle && <span className="eyebrow">{subtitle}</span>}
             <h2>{title}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fechar">×</button>

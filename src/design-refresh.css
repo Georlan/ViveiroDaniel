@@ -422,3 +422,221 @@ button { -webkit-tap-highlight-color: transparent; }
 .pond-card-alert .ui-icon { width: 15px; height: 15px; }
 .pond-card .pond-card-cta { min-height: 36px; padding: 10px 0 0; border-top: 1px solid var(--border-card); font-size: .8rem; color: var(--accent-teal); }
 .pond-card .cta-arrow { font-size: 1.1rem; }
+
+/* Simplificação de uso — uma informação principal e poucos controles por tela. */
+:root {
+  --bg-app: #0b1a1e;
+  --surface-card: #11262b;
+  --surface-raised: #173136;
+  --border-card: #2a474b;
+  --text-muted: #b3c7c5;
+  --accent-teal: #54dccb;
+}
+body { background: var(--bg-app); }
+.page { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
+.pond-header-card {
+  padding: 20px;
+  background: var(--surface-card);
+  border-color: var(--border-card);
+  border-radius: 16px;
+}
+.pond-header-card::after { display: none; }
+.pond-header-top { margin: 0; }
+.pond-header-top .hero-kicker { font-size: .76rem; color: var(--text-muted); font-weight: 600; }
+.pond-header-card .pond-density-hero { margin-top: 15px; gap: 5px; }
+.pond-density-hero > span { font-size: .78rem; }
+.pond-density-hero > strong { font-size: clamp(2rem, 7vw, 2.75rem); }
+.pond-header-meta { margin: 11px 0 0; font-size: .83rem; }
+.operational-actions { gap: 9px; margin: 14px 0 20px; }
+.operational-primary { min-height: 54px; font-size: .98rem; }
+.operational-secondary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; }
+.operational-secondary-grid .secondary-button {
+  min-height: 47px;
+  flex-direction: row;
+  padding: 8px 10px;
+  font-size: .83rem;
+  font-weight: 650;
+  gap: 7px;
+}
+.operational-secondary-grid .ui-icon { width: 18px; height: 18px; }
+.section-heading h2 { font-size: 1.18rem; }
+.latest-section { margin-top: 0; }
+.latest-heading { margin-bottom: 10px; }
+.latest-metrics {
+  border-radius: 14px;
+  border-color: var(--border-card);
+  background: var(--surface-card);
+  padding: 3px 5px;
+}
+.latest-metrics .metric { padding: 12px 11px; }
+.latest-metrics .metric.featured strong { font-size: clamp(1.85rem, 7vw, 2.4rem); }
+.feed-integrity-callout {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-radius: 11px;
+}
+.feed-integrity-callout > .ui-icon {
+  align-self: center;
+  margin-top: 0;
+  width: 20px; height: 20px;
+}
+.feed-integrity-callout > span {
+  flex: 1;
+  min-width: 0;
+  font-size: .82rem;
+  font-weight: 700;
+}
+.feed-integrity-callout .secondary-button {
+  margin: 0;
+  width: auto;
+  min-height: 36px;
+  padding: 0 11px;
+  font-size: .77rem;
+}
+.detail-disclosure {
+  margin-top: 10px;
+  background: transparent;
+  border-radius: 11px;
+  border-color: var(--border-card);
+}
+.detail-disclosure > summary { min-height: 44px; font-size: .84rem; padding: 10px 12px; }
+.detail-disclosure > summary::before { content: '＋'; font-size: .95rem; }
+.detail-disclosure[open] > summary::before { content: '−'; }
+.detail-disclosure .field-metrics { padding: 0 8px 8px; }
+.detail-disclosure .metric { padding: 10px; }
+.detail-disclosure .technical-inline-note { margin: 0 12px 12px; }
+.detail-disclosure .estimate-footnote { margin: 0 12px 12px; }
+.biometry-history { margin-top: 22px; }
+.history-heading { margin-bottom: 10px; }
+.history-list {
+  display: block;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border-card);
+  background: var(--surface-card);
+}
+.history-card {
+  grid-template-areas: "date edit" "values values" "alert alert";
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-card);
+  border-radius: 0;
+  background: transparent;
+  padding: 11px 13px;
+}
+.history-card:last-child { border-bottom: 0; }
+.history-date {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.history-date strong { font-size: .82rem; }
+.history-date span { font-size: .73rem; }
+.history-edit-button {
+  min-height: 34px;
+  padding: 0 10px;
+  background: transparent;
+  border-color: var(--border-card);
+  font-size: .77rem;
+}
+.history-values {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 8px;
+  padding: 2px 0;
+}
+.history-values span {
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+.history-values span strong { font-size: .86rem; }
+.history-values span.history-weight strong { font-size: 1rem; }
+.history-values span small { font-size: .68rem; }
+.history-alert { font-size: .72rem; }
+.empty-card { border-radius: 12px; padding: 22px 14px; }
+.empty-card h2 { font-size: 1.07rem; }
+.empty-card p { margin: 5px 0 0; font-size: .82rem; }
+.pond-extra-details {
+  margin-top: 9px;
+  border-radius: 11px;
+  padding: 12px 13px;
+  background: rgba(17,38,43,.7);
+}
+.pond-extra-details summary { min-height: 25px; font-size: .86rem; }
+.balance-caption { margin: 0 0 12px; font-size: .78rem; color: var(--text-muted); line-height: 1.45; }
+.dashboard-settings {
+  border-top: 1px solid var(--border-card);
+  margin: 24px 0 0;
+  padding: 7px 0;
+  color: var(--text-muted);
+}
+.dashboard-settings > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: .83rem;
+  font-weight: 650;
+}
+.sync-minimal { padding: 8px 0 18px; display: grid; gap: 10px; }
+.sync-minimal p { margin: 0; font-size: .81rem; line-height: 1.5; }
+.sync-minimal .sync-message { display: block; font-size: .74rem; }
+.sync-minimal .sync-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sync-minimal .sync-actions button { flex: 1 1 auto; }
+.form-grid { gap: 13px; }
+.form-grid .modal-actions {
+  grid-template-columns: minmax(0,1fr);
+}
+.form-grid .modal-actions .primary-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 52px;
+}
+.form-estimate-warning {
+  margin: 0;
+  padding: 12px;
+  border-left: 3px solid #d7af62;
+  color: #ffdfa2;
+  background: rgba(80,63,24,.3);
+  font-size: .81rem;
+  line-height: 1.45;
+}
+.form-grid .biometry-inline-result {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--surface-raised);
+  border-radius: 9px;
+  font-size: .79rem;
+}
+.product-consumption-details {
+  border-top: 1px solid var(--border-card);
+  margin-top: 7px;
+  padding-top: 8px;
+}
+.product-consumption-details > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: .85rem;
+}
+.product-consumption-details .usage-period-head { margin-top: 8px; }
+.product-consumption-details .product-catalog { margin-top: 10px; }
+.product-consumption-details .product-consumption-card { padding: 12px; }
+@media (max-width: 420px) {
+  .operational-secondary-grid .secondary-button { flex-direction: row; font-size: .79rem; min-height: 48px; }
+  .history-values span strong { font-size: .84rem; }
+  .history-values span.history-weight strong { font-size: 1rem; }
+  .feed-integrity-callout .secondary-button { margin: 0; }
+}
