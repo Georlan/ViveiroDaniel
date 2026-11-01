@@ -1,6 +1,6 @@
 import { describe,it,expect,vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { PondDetail,PondCard,PondForm,TransferForm } from './App'
+import { PondDetail,PondCard,PondForm,TransferForm,StorageMessageContext } from './App'
 import { BiometryList } from './components/BiometryList'
 import { demonstrationPonds } from './data/demonstration'
 import { densityPerSquareMeter,populationAtDate } from './domain/calculations'
@@ -68,4 +68,10 @@ it('requires explicit confirmation when transferred animals would add to an exis
   expect(html).toContain('Sim, estou adicionando outros animais a esse saldo.')
   const empty=renderToStaticMarkup(<TransferForm ponds={[source,{...target,initialPopulation:0}]} source={source} onClose={vi.fn()} onSave={async()=>true}/>)
   expect(empty).not.toContain('type="checkbox"')
+})
+
+it('shows local save failures inside the open form',()=>{
+  const html=renderToStaticMarkup(<StorageMessageContext.Provider value="Não foi possível salvar neste navegador."><PondForm onClose={vi.fn()} onSave={vi.fn()}/></StorageMessageContext.Provider>)
+  expect(html).toContain('role="alert"')
+  expect(html).toContain('Não foi possível salvar neste navegador.')
 })

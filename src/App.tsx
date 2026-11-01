@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   accumulatedFeedFromPeriod,
   averageWeightFromSample,
@@ -33,6 +33,8 @@ import {
 import type { BiometryInput, Pond, PopulationMovement, ProductUsage } from './types'
 import { loadLocalPondsLocked, saveLocalPondsLocked, createBackup, createRecoveryBackup } from './storage'
 import { LocalBackupPanel } from './components/LocalBackupPanel'
+
+export const StorageMessageContext = createContext('')
 
 const browserStorage = { getItem: (key: string) => window.localStorage.getItem(key), setItem: (key: string, value: string) => window.localStorage.setItem(key, value) }
 
@@ -231,7 +233,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <StorageMessageContext.Provider value={storageMessage}><div className="app-shell">
       <header className="topbar">
         {selected ? (
           <div className="topbar-nav">
@@ -306,7 +308,7 @@ export default function App() {
           onSave={saveBiometry}
         />
       )}
-    </div>
+    </div></StorageMessageContext.Provider>
   )
 }
 
@@ -1431,6 +1433,7 @@ function ModalShell({
   onClose: () => void
   children: React.ReactNode
 }) {
+  const storageMessage = useContext(StorageMessageContext)
   const sheetRef = useRef<HTMLElement>(null)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
@@ -1462,6 +1465,7 @@ function ModalShell({
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
         </div>
+        {storageMessage && <p className="form-error" role="alert">{storageMessage}</p>}
         {children}
       </section>
     </div>
