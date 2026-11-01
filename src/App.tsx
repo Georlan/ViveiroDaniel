@@ -844,7 +844,7 @@ function PondCard({
   )
 }
 
-function PondDetail({
+export function PondDetail({
   pond,
   onTransfer,
   onAddBiometry,
