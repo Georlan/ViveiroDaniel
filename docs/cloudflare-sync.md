@@ -1,73 +1,36 @@
-# Sincronização compartilhada gratuita
+# Atualização estática e backups locais
 
-O aplicativo continua sendo um projeto Cloudflare Pages. A sincronização usa apenas:
+A versão atual não utiliza backend. Cloudflare Pages entrega `dist/`; não há API, Functions, D1 ou configuração paga. O antigo recurso de compartilhamento remoto foi removido. Tokens antigos não são enviados nem usados para substituir dados locais.
 
-- Pages Functions no próprio projeto;
-- um banco Cloudflare D1;
-- um link secreto gerado pelo aplicativo.
+## Atualizar um celular já em uso
 
-Não existe servidor separado para administrar.
+1. Abrir o mesmo endereço de produção, no mesmo navegador usado anteriormente.
+2. Recarregar a página sem limpar os dados do site.
+3. Conferir viveiros, lista completa de biometrias, produtos e movimentos.
+4. Abrir **Backup e troca de aparelho** e exportar o arquivo; guardar uma cópia fora do celular.
 
-## Fonte canônica
+O localStorage é separado por origem (protocolo, domínio e porta). Não trocar `pages.dev` por domínio próprio, nem usar o endereço de preview para procurar registros de produção. Outra origem não consegue ler os dados anteriores.
 
-Quando o compartilhamento está desligado, `localStorage` continua sendo a fonte local daquele aparelho.
+## Migração
 
-Quando o compartilhamento está ativado:
+- Prioridade: v4, v3, v2, v1; uma lista vazia mais recente é respeitada.
+- Antes da primeira migração, guardar todas as chaves antigas encontradas, byte a byte, em `viveiro-daniel:before-v4`.
+- Validar a estrutura completa; nenhum cadastro ou biometria é descartado silenciosamente.
+- Preservar V01 e V02 independentemente do ID ou versão do cadastro.
+- Não acrescentar produtos de relatórios nem apagar biometrias ou metadados.
+- Dados inválidos ou falta de espaço bloqueiam a migração. Exportação das cópias de recuperação permanece disponível quando o navegador permite leitura.
+- A versão antiga pode ter apagado registros antes desta atualização. Não é possível reconstruir o que não existe mais; cópias legadas, quando presentes, ficam no arquivo de recuperação.
 
-1. o app cria um token aleatório forte;
-2. o token identifica a fonte compartilhada;
-3. somente o hash SHA-256 do token é armazenado no D1;
-4. a versão canônica dos viveiros e biometrias fica no D1;
-5. `localStorage` vira apenas uma cópia/cache local;
-6. o app consulta a fonte a cada 15 segundos enquanto está visível e também ao voltar para a janela;
-7. qualquer salvamento usa controle de versão para impedir sobrescrita silenciosa quando dois aparelhos alteram os dados ao mesmo tempo.
+## Outro aparelho
 
-O token viaja no fragmento `#share=...` do link. Fragmentos não são enviados automaticamente ao servidor pelo navegador. O app lê o token e o envia à API somente via HTTPS.
+Exportar o backup JSON no aparelho de origem, enviar o arquivo pelo meio escolhido pelo operador e importar no destino. A prévia mostra viveiros, biometrias e produtos. Confirmar substituição explicitamente; o estado anterior fica em `viveiro-daniel:previous-save`. Importação não mescla duas bases automaticamente.
 
-Quem possuir o link compartilhado consegue ler e editar os dados. Não publique esse link.
+**Exportar cópias de recuperação** gera um arquivo separado com valores brutos das chaves antigas e da gravação anterior. É destinado à recuperação assistida; não é importado diretamente como base operacional. Não inclui tokens antigos de compartilhamento.
 
-## Ativar no Cloudflare
+## Publicação
 
-O código já está pronto. Falta apenas criar e vincular um D1 ao projeto Pages:
+GitHub `main` → integração existente do Cloudflare Pages → `npm run build` → `dist`. A publicação preserva o armazenamento do navegador no mesmo domínio. `_headers` solicita revalidação do HTML para obter a versão atual, sem apagar localStorage.
 
-1. Cloudflare Dashboard → **Workers & Pages** → **D1** → criar um banco, por exemplo `viveiro-daniel`.
-2. Abrir o projeto Pages do Viveiro Daniel.
-3. **Settings → Bindings → Add → D1 database binding**.
-4. Usar exatamente o nome de variável **DB**.
-5. Selecionar o banco criado.
-6. Fazer um novo deploy da `main`.
+Fontes: [MDN localStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage), [Cloudflare Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/), [Cloudflare headers](https://developers.cloudflare.com/pages/configuration/headers/).
 
-Não é necessário rodar migration manualmente: a Function cria a tabela `shared_state` no primeiro uso com `CREATE TABLE IF NOT EXISTS`. O arquivo `migrations/0001_shared_state.sql` existe apenas para documentação e manutenção futura.
-
-## Como usar
-
-No aparelho principal:
-
-1. abrir o dashboard;
-2. tocar em **Ativar grátis**;
-3. tocar em **Copiar link**;
-4. enviar esse link ao segundo aparelho.
-
-No segundo aparelho:
-
-1. abrir o link recebido;
-2. o app salva a chave compartilhada localmente;
-3. carrega imediatamente a versão canônica do D1.
-
-Depois disso ambos podem abrir o endereço normal do site naquele navegador. A chave já estará salva naquele aparelho.
-
-## Conflitos
-
-Cada salvamento envia a versão que o aparelho leu.
-
-Se outro aparelho salvou primeiro, a API responde com conflito em vez de sobrescrever silenciosamente. O aplicativo carrega a versão mais nova e pede que a pessoa revise e salve novamente.
-
-## Limites do modo gratuito
-
-A arquitetura foi escolhida para caber com ampla margem no plano gratuito para duas pessoas:
-
-- Pages Functions compartilham a cota gratuita de Workers;
-- D1 possui cotas gratuitas próprias de leitura, escrita e armazenamento;
-- a sincronização periódica ocorre apenas quando a página está visível.
-
-Se uma cota gratuita for atingida, a Cloudflare passa a devolver erro; o projeto não depende de um servidor mensal dedicado.
+As gravações da versão nova usam Web Locks para serializar abas quando o navegador oferece essa API. Sem ela, permanece a detecção de versão desatualizada, sem garantia contra duas gravações exatamente simultâneas.

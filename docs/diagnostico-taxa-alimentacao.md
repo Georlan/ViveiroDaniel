@@ -44,6 +44,6 @@ Não alterar automaticamente a taxa para ~4,64%, reduzir ração diária, modifi
 - Quando a estimativa exceder o limite teórico, ocultar biomassa, sobrevivência e FCA como indicadores válidos, mostrando a diferença em **kg de ração por dia** e explicando a hipótese.
 - Não bloquear o registro nem sugerir alterações arbitrárias no manejo.
 - Manter população de 220.000 como informado, sem acrescentar bônus.
-- Histórico auditável de alterações de entrada no D1 (a partir da implantação da funcionalidade, não retroativo).
+- Atualização: a versão estática de 01/11/2026 usa backups locais; não exige D1 nem mantém histórico remoto.
 
 A tabela fotográfica é apenas uma referência de alimentação por peso; o relatório V01 utiliza taxas operacionalmente distintas. A ausência de sobrevivências superiores a 100% nas seis linhas originais **não é uma garantia matemática** para outros valores de ração, peso e população.
