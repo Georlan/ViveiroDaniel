@@ -238,6 +238,18 @@ export function populationBalanceAtDate(pond: Pick<Pond, 'initialPopulation' | '
   }
 }
 
+/** Remove a pond and both sides of every transfer involving it, in one local save.
+ * This reverses the bookkeeping effect on other ponds without changing their
+ * original biometries, products, or transfers unrelated to the removed pond. */
+export function removePondWithTransfers(ponds: Pond[], pondId: string): Pond[] {
+  if (!ponds.some(pond => pond.id === pondId)) return ponds
+  return ponds.filter(pond => pond.id !== pondId).map(pond => {
+    const movements = pond.populationMovements ?? []
+    const retained = movements.filter(movement => movement.counterpartPondId !== pondId)
+    return retained.length === movements.length ? pond : { ...pond, populationMovements: retained }
+  })
+}
+
 export function populationAtDate(pond: Pick<Pond, 'initialPopulation' | 'populationMovements'>, date: string) {
   return populationBalanceAtDate(pond, date).population
 }
