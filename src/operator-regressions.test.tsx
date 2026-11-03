@@ -70,6 +70,16 @@ it('requires explicit confirmation when transferred animals would add to an exis
   expect(empty).not.toContain('type="checkbox"')
 })
 
+it('shows an explicit but non-immediate deletion action only for existing ponds',()=>{
+  const edit=renderToStaticMarkup(<PondForm initial={recipient} onClose={vi.fn()} onSave={vi.fn()}
+    onDelete={async()=>true} onExport={vi.fn()}/>)
+  expect(edit).toContain('Excluir este viveiro')
+  expect(edit).not.toContain('Confirmar exclusão')
+  const create=renderToStaticMarkup(<PondForm onClose={vi.fn()} onSave={vi.fn()}
+    onDelete={async()=>true}/>)
+  expect(create).not.toContain('Excluir este viveiro')
+})
+
 it('shows local save failures inside the open form',()=>{
   const html=renderToStaticMarkup(<StorageMessageContext.Provider value="Não foi possível salvar neste navegador."><PondForm onClose={vi.fn()} onSave={vi.fn()}/></StorageMessageContext.Provider>)
   expect(html).toContain('role="alert"')
