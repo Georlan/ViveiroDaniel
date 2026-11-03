@@ -17,6 +17,7 @@ import {
   technicalMetricsStatus,
   populationAtDate,
   populationBalanceAtDate,
+  removePondWithTransfers,
 } from './domain/calculations'
 import { demonstrationPonds } from './data/demonstration'
 import { BiometryList } from './components/BiometryList'
@@ -185,6 +186,17 @@ export default function App() {
     if (saved) { setModal(null); setNotice('Cadastro atualizado.') }
   }
 
+  async function deletePond(pondId: string) {
+    if (!ponds.some(pond => pond.id === pondId)) return false
+    const saved = await persist(removePondWithTransfers(ponds, pondId))
+    if (saved) {
+      setModal(null)
+      setSelectedId(null)
+      setNotice('Viveiro excluído. Transferências relacionadas foram removidas do controle.')
+    }
+    return saved
+  }
+
   async function saveProductUsage(pondId: string, usage: ProductUsage) {
     const next = ponds.map((pond) =>
       pond.id === pondId
@@ -287,6 +299,8 @@ export default function App() {
           initial={editingPond ?? undefined}
           onClose={() => setModal(null)}
           onSave={editingPond ? updatePond : addPond}
+          onDelete={editingPond ? deletePond : undefined}
+          onExport={() => downloadBackup()}
         />
       )}
       {modal?.kind === 'products' && (
@@ -603,11 +617,18 @@ export function PondForm({
   initial,
   onClose,
   onSave,
+  onDelete,
+  onExport,
 }: {
   initial?: Pond
   onClose: () => void
   onSave: (pond: Pond) => void
+  onDelete?: (pondId: string) => Promise<boolean>
+  onExport?: () => void
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteWord, setDeleteWord] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const [stockingMode,setStockingMode]=useState<'direct'|'transfer'>(initial?.initialPopulation===0?'transfer':'direct')
   const [form, setForm] = useState({
     name: initial?.name ?? '',
@@ -620,6 +641,13 @@ export function PondForm({
     feeder: initial?.feeder ?? '',
     plPerGram: initial?.plPerGram != null ? String(initial.plPerGram) : '',
   })
+
+  async function confirmDeletion() {
+    if (!initial || !onDelete || deleting || deleteWord.trim().toUpperCase() !== 'EXCLUIR') return
+    setDeleting(true)
+    const removed = await onDelete(initial.id)
+    if (!removed) setDeleting(false)
+  }
 
   const areaM2 = Number(form.areaSquareMeters)
   const initialAnimals = Number(form.initialPopulation)
@@ -701,9 +729,35 @@ export function PondForm({
           <Field label="Ciclo" required><input required type="number" min="1" inputMode="numeric" value={form.cycle} onChange={(e) => setForm({ ...form, cycle: e.target.value })} /></Field>
           <Field label="PL/g"><input type="number" min="0" step="any" inputMode="decimal" value={form.plPerGram} onChange={(e) => setForm({ ...form, plPerGram: e.target.value })} /></Field>
         </div>
-        <div className="modal-actions">
+        {!deleteOpen && <div className="modal-actions">
           <button className="primary-button" type="submit">{initial ? 'Salvar alterações' : 'Criar viveiro'}</button>
-        </div>
+        </div>}
+        {initial && onDelete && (
+          <section className="pond-delete-zone" aria-label="Exclusão do viveiro">
+            {!deleteOpen ? (
+              <button type="button" className="danger-text-button" onClick={() => setDeleteOpen(true)}>
+                Excluir este viveiro
+              </button>
+            ) : (
+              <div className="pond-delete-confirmation">
+                <strong>Excluir {initial.name} definitivamente deste aparelho?</strong>
+                <p>Serão excluídos o cadastro, as pesagens, os produtos e as transferências deste viveiro. As movimentações correspondentes também serão removidas dos outros viveiros, restaurando seus saldos de controle. Os demais registros serão mantidos.</p>
+                <p>Exporte um backup antes de prosseguir. Para refazer a transferência, crie um novo viveiro com população inicial zero e registre a movimentação novamente.</p>
+                {onExport && <button type="button" className="secondary-button" onClick={onExport}>Exportar backup JSON</button>}
+                <label className="field delete-confirm-field">
+                  <span>Digite EXCLUIR para confirmar</span>
+                  <input type="text" autoComplete="off" spellCheck={false} value={deleteWord} disabled={deleting}
+                    onChange={event => setDeleteWord(event.target.value)} placeholder="EXCLUIR" />
+                </label>
+                <div className="delete-confirm-actions">
+                  <button type="button" className="secondary-button" disabled={deleting} onClick={() => { setDeleteOpen(false); setDeleteWord('') }}>Cancelar exclusão</button>
+                  <button type="button" className="danger-button" disabled={deleting || deleteWord.trim().toUpperCase() !== 'EXCLUIR'}
+                    onClick={() => void confirmDeletion()}>{deleting ? 'Excluindo…' : 'Confirmar exclusão'}</button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
       </form>
     </ModalShell>
   )
