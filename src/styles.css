@@ -1591,3 +1591,24 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .delete-confirm-actions>button { flex: 1 1 150px; min-height: 48px; }
 .danger-button { border: 1px solid #921c28; border-radius: 10px; background: #ab2531; color: #fff; padding: 12px 14px; font: inherit; font-weight: 700; }
 .danger-button:disabled { background: #c99a9e; border-color: #c99a9e; }
+
+/* Estimativas restauradas: quebra responsiva sem texto truncado. */
+.biometry-estimates { margin: 16px 0; padding: 16px; border: 1px solid #b7cbc0; border-radius: 12px; background: #f3f8f3; }
+.biometry-estimates-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 14px; }
+.biometry-estimates-head h3 { margin: 0; font-size: 1rem; color: var(--ink); }
+.biometry-estimates-head>span { color: #72511e; font-size: .75rem; }
+.biometry-estimates-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.biometry-estimates-grid>div { display: grid; align-content: start; min-width: 0; gap: 5px; padding: 12px; border: 1px solid #d8e5db; border-radius: 9px; background: #fff; }
+.biometry-estimates-grid>div:last-child { grid-column: 1/-1; }
+.biometry-estimates-grid span { font-size: .78rem; color: var(--muted); }
+.biometry-estimates-grid strong { font-size: 1.3rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+.biometry-estimates-grid small { color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.biometry-estimates-note,.biometry-estimates-alert,.biometry-estimates-footnote { margin: 12px 0 0; font-size: .8rem; line-height: 1.5; }
+.biometry-estimates-note,.biometry-estimates-footnote { color: var(--muted); }
+.biometry-estimates-alert { padding: 10px 12px; border-left: 3px solid #b4863e; background: #fff3dd; color: #704b12; }
+@media(max-width:380px) {
+  .biometry-estimates { padding: 12px; }
+  .biometry-estimates-grid { gap: 8px; }
+  .biometry-estimates-grid>div { padding: 10px; }
+  .biometry-estimates-grid strong { font-size: 1.1rem; }
+}
