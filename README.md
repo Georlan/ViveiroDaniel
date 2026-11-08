@@ -31,6 +31,8 @@ Se houver taxa informada e ração diária positiva, uma seção própria permit
 - Biomassa inferida da ração: `ração diária / (taxa % / 100)` em kg.
 - Percentual equivalente do saldo: `biomassa inferida / (saldo × peso médio / 1.000) × 100`.
 
+As telas de lista completa, comparação e primeira pesagem mostram Biomassa est., Sobrevivência est. e FCA est. (histórico). Os campos continuam visíveis mesmo quando dados contraditórios impedem números confiáveis. A razão histórica é sinalizada como não validada, sem substituir o FCA real.
+
 Esses resultados não medem estoque vivo nem demonstram mortalidade. Percentuais acima de 100% são uma hipótese incompatível com os registros, não sobrevivência real e não são limitados artificialmente a 100%. Um dia sem ração não é convertido em estoque zero. Alterar a taxa altera a base da simulação.
 
 O FCA não é validado a partir de biomassa inferida da mesma ração. É necessário ganho independente de biomassa e contabilização das entradas e saídas no mesmo período. A razão antiga `ração acumulada / biomassa inferida` permanece apenas como `feedToStandingBiomassRatio`, para reconciliar a aritmética do relatório; `fca` fica indisponível.

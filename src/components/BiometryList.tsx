@@ -3,6 +3,7 @@ import { calculateHistory,densityPerSquareMeter,populationAtDate,isFeedPeriodInc
 import { compareMeasurements,feedScenario,validMeasurement } from '../domain/biometryReview'
 import { formatDate,formatNumber,formatSigned } from '../format'
 import { BiometryRecordDetails } from './BiometryRecordDetails'
+import { BiometryEstimates } from './BiometryEstimates'
 import { FeedSimulation } from './FeedSimulation'
 
 export function BiometryList({pond,onEdit}:{pond:Pond;onEdit:(id:string)=>void}) {
@@ -25,6 +26,7 @@ export function BiometryList({pond,onEdit}:{pond:Pond;onEdit:(id:string)=>void})
           <div><span>Animais por área</span><strong>{formatNumber(densityPerSquareMeter(pond,population),1)}<small>animais/m²</small></strong></div>
         </div>
         <p className="list-feed-line"><span>Ração diária: <strong>{formatNumber(row.dailyFeedKg,Number.isInteger(row.dailyFeedKg)?0:2)} kg</strong></span><span>Acumulada: <strong>{formatNumber(row.accumulatedFeedKg,Number.isInteger(row.accumulatedFeedKg)?0:2)} kg</strong></span></p>
+        <BiometryEstimates pond={pond} current={row} previous={previous}/>
         {inverted ? <p className="list-record-warning" role="status">Ração do dia maior que o total do período. Confira os dois valores.</p> : comparison?.feedInconsistent ? <p className="list-record-warning">Ração do período e acumulados não conferem. Revise este registro.</p> : scenario.status==='inconsistent' ? <p className="list-record-warning">Simulação incompatível com o saldo cadastral. Revise ração e taxa.</p>:null}
         {comparison?.compositionChanged && <p className="list-record-warning">Há transferência na janela destas biometrias. A composição da amostra pode ter mudado.</p>}
         <BiometryRecordDetails record={row}/><FeedSimulation pond={pond} current={row} previous={previous}/>

@@ -32,7 +32,7 @@ describe('operator voice notes and old screenshot regressions',()=>{
     expect(html).toContain('13/06/2026')
     expect(html).toContain('30,0')
     expect(html).not.toContain('Revisar esti...')
-    expect(html).not.toContain('FCA est.')
+    expect(html).toContain('FCA est.')
   })
   it('flags the old 152 kg/day versus 25 kg period and does not show inferred 4,222 kg as valid biomass',()=>{
     const pond:Pond={...recipient,initialPopulation:220000,populationMovements:[],stockingDate:'2026-09-04',biometries:[
@@ -46,7 +46,7 @@ describe('operator voice notes and old screenshot regressions',()=>{
     expect(list).toContain('Ração do dia maior que o total do período')
     const detail=renderDetail(pond)
     expect(detail).not.toContain('4.222')
-    expect(detail).not.toContain('FCA est.')
+    expect(detail).toContain('FCA est.')
     expect(detail).toContain('Hipótese incompatível')
   })
   it('allows decimal PL/g and makes transfer-only setup explicit',()=>{

@@ -25,6 +25,7 @@ import { BiometryEvolution } from './components/BiometryEvolution'
 import { FeedSimulation } from './components/FeedSimulation'
 import { FeedReferencePanel } from './components/FeedReferencePanel'
 import { BiometryRecordDetails } from './components/BiometryRecordDetails'
+import { BiometryEstimates } from './components/BiometryEstimates'
 import { formatDate, formatNumber, formatSigned } from './format'
 import {
   aggregateProductUsages,
@@ -444,6 +445,7 @@ export function PondDetail({
         <section className="latest-section" aria-label="Primeira biometria">
           <div className="section-heading"><div><h2>Primeira pesagem</h2><p>{formatDate(latest.date)}</p></div><button className="text-button" onClick={()=>onEditBiometry(latest.id)}>Editar</button></div>
           <div className="first-measurement"><span>Peso médio da amostra</span><strong>{formatNumber(latest.currentWeightG,2)} g</strong><p>A próxima pesagem permitirá comparar a variação. Não há crescimento calculado a partir de um único registro.</p></div>
+          <BiometryEstimates pond={pond} current={latest}/>
           <BiometryRecordDetails record={latest}/><FeedSimulation pond={pond} current={latest}/>
         </section>
       ) : (

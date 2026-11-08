@@ -5,6 +5,7 @@ import { compareMeasurements, validMeasurement } from '../domain/biometryReview'
 import { formatDate, formatNumber, formatSigned } from '../format'
 import { FeedSimulation } from './FeedSimulation'
 import { BiometryRecordDetails } from './BiometryRecordDetails'
+import { BiometryEstimates } from './BiometryEstimates'
 
 function WeightChart({history,selectedIndex}:{history:CalculatedBiometry[];selectedIndex:number}) {
   const titleId=useId(),descriptionId=useId()
@@ -61,6 +62,7 @@ export function BiometryEvolution({pond,onEdit}:{pond:Pond;onEdit:(id:string)=>v
       <div className="feed-comparison"><h3>Ração no intervalo</h3><div className="feed-change"><span>Ração diária registrada</span><strong>{formatNumber(previous.dailyFeedKg,2)} → {formatNumber(current.dailyFeedKg,2)} <small>kg/dia</small></strong><span>{comparison.feedDailyChangeKg===null?'Confira os valores diários.':formatSigned(comparison.feedDailyChangeKg,2)+' kg/dia de diferença'}</span></div><div className="period-feed"><span>Total fornecido no período</span><strong>{comparison.feedInPeriodKg===null?'Revisar registros':formatNumber(comparison.feedInPeriodKg,2)+' kg'}</strong></div><p>{comparison.feedInconsistent?'O total do período e os acumulados não conferem. Revise os registros antes de usar este total.':comparison.feedBasis==='recorded-period'?'Total informado no registro.':'Total calculado pela diferença dos acumulados.'} Ração fornecida não equivale a consumo medido.</p></div>
       <div className="comparison-edit"><button className="text-button" onClick={()=>onEdit(previous.id)}>Editar {formatDate(previous.date).slice(0,5)}</button><button className="text-button" onClick={()=>onEdit(current.id)}>Editar {formatDate(current.date).slice(0,5)}</button></div>
     </div> : <p className="comparison-caution">Não é possível comparar estas datas. Confira se há duas biometrias válidas em dias diferentes.</p>}
+    <BiometryEstimates pond={pond} current={current} previous={previous}/>
     <BiometryRecordDetails record={current}/>
     <FeedSimulation pond={pond} current={current} previous={previous}/>
     <p className="sample-footnote">Cada pesagem representa uma amostra. A coleta e a composição do lote podem alterar a média.</p>
