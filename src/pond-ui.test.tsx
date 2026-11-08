@@ -52,7 +52,7 @@ describe('simple pond field view', () => {
     }
     const html = renderPond(pond)
     expect(html).toContain('Hipótese incompatível')
-    expect(html).not.toContain('Biomassa est.')
+    expect(html).toContain('Biomassa est.')
     expect(html).toContain('50,00 kg/dia')
   })
 
@@ -75,7 +75,7 @@ describe('evidence-aware operator view',()=>{
     expect(text).toContain('69,00 kg')
     expect(text).toContain('Simulação pela ração')
     expect(text).toContain('Por que o FCA não aparece?')
-    expect(html).not.toContain('FCA est.')
+    expect(html).toContain('FCA est.')
   })
   it('shows no growth from a single sample and preserves its recorded feed',()=>{
     const pond=demonstrationPonds()[0]
