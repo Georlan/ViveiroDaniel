@@ -15,13 +15,13 @@ A pesagem tem duas etapas: data e amostra; depois ração e revisão. O operador
 - Dia de cultivo: data da biometria − povoamento + 1, por convenção inclusiva.
 - Densidade cadastral: saldo de animais / área em m². O saldo inclui transferências e não desconta mortalidade não registrada.
 
-O gráfico usa o tempo real entre as datas e apenas pontos medidos. O operador seleciona um intervalo e compara peso antes/depois, ritmo normalizado, ração diária e total do período. Transferências na janela são sinalizadas porque podem mudar a composição das amostras.
+A tabela de evolução mostra todas as datas, dias de cultivo, pesos, biomassas estimadas, sobrevivências estimadas, ração acumulada e FCA estimado. No celular, apenas a tabela tem rolagem horizontal. O gráfico usa o tempo real entre as datas e apenas pontos medidos. O operador seleciona um intervalo e compara peso antes/depois, ritmo normalizado, ração diária e total do período. Transferências na janela são sinalizadas porque podem mudar a composição das amostras.
 
 O total de ração do período inclui o dia da biometria. Não pode ser menor que a ração registrada para aquele dia. A leitura preserva acumulados e totais originais para expor contradições. Ao salvar uma edição, `normalizeBiometryInputs` recompõe explicitamente a cadeia a partir dos períodos registrados, respeitando âncoras de acumulado nos registros antigos.
 
 ## Taxa alimentar e simulação
 
-Espécie, sistema, ração e origem técnica da tabela ainda não foram confirmados. Novas pesagens não recebem taxa alimentar automática. É possível salvar sem taxa; ao editar, taxas anteriores permanecem explícitas e podem ser retiradas ou revisadas.
+Desde 16/11/2026, a referência por peso já existente em `FEED_RATE_BY_WEIGHT` é aplicada quando o registro não possui taxa (zero) ou tem origem `table`. Usa a linha mais próxima entre 0,2 e 30 g, sem extrapolar. Taxas manuais positivas permanecem preservadas. O formulário permite substituir a referência pela taxa usada no manejo. Esta referência é diferente da fotografia transcrita abaixo.
 
 A fotografia recebida em 01/11/2026 foi transcrita em `src/data/feedReference.ts`, mantendo pesos repetidos e valores "ideais" fora do mínimo/máximo. A consulta identifica esses conflitos; não interpola, extrapola ou recomenda percentuais.
 
@@ -31,11 +31,11 @@ Se houver taxa informada e ração diária positiva, uma seção própria permit
 - Biomassa inferida da ração: `ração diária / (taxa % / 100)` em kg.
 - Percentual equivalente do saldo: `biomassa inferida / (saldo × peso médio / 1.000) × 100`.
 
-As telas de lista completa, comparação e primeira pesagem mostram Biomassa est., Sobrevivência est. e FCA est. (histórico). Os campos continuam visíveis mesmo quando dados contraditórios impedem números confiáveis. A razão histórica é sinalizada como não validada, sem substituir o FCA real.
+As telas de lista completa, comparação e primeira pesagem mostram Biomassa est., Sobrevivência est. e FCA est. (histórico). Os números calculáveis permanecem visíveis mesmo com divergência de ração, sobrevivência teórica acima de 100% ou transferências, acompanhados dos respectivos avisos. Somente dados insuficientes deixam o valor vazio. A razão histórica é sinalizada como não validada, sem substituir o FCA real.
 
 Esses resultados não medem estoque vivo nem demonstram mortalidade. Percentuais acima de 100% são uma hipótese incompatível com os registros, não sobrevivência real e não são limitados artificialmente a 100%. Um dia sem ração não é convertido em estoque zero. Alterar a taxa altera a base da simulação.
 
-O FCA não é validado a partir de biomassa inferida da mesma ração. É necessário ganho independente de biomassa e contabilização das entradas e saídas no mesmo período. A razão antiga `ração acumulada / biomassa inferida` permanece apenas como `feedToStandingBiomassRatio`, para reconciliar a aritmética do relatório; `fca` fica indisponível.
+O FCA não é validado a partir de biomassa inferida da mesma ração. É necessário ganho independente de biomassa e contabilização das entradas e saídas no mesmo período. A razão antiga `ração acumulada / biomassa inferida` permanece apenas como `feedToStandingBiomassRatio`, para reconciliar a aritmética do relatório e preencher o indicador **FCA est. (histórico)**. O campo de domínio `fca` continua reservado ao FCA real validado. Transferências são avisadas sem ocultar a razão estimada.
 
 ## Evidência e testes
 
@@ -67,6 +67,8 @@ O build estático fica em `dist/`. Em desenvolvimento, `/?demo=2` abre uma demon
 Projeto estático e gratuito: React/Vite no frontend, sem servidor, Functions, banco D1, login ou sincronização remota. Build `npm run build`, saída `dist`, Node.js 20+. Não exige variável de ambiente nem binding. A branch de produção é `main`.
 
 Os registros ficam no localStorage de cada navegador. A versão atual lê as chaves v1/v2/v3, guarda os bytes originais em `viveiro-daniel:before-v4` e cria a base v4. Preserva todos os IDs, inclusive V01/V02, biometrias, movimentos, produtos e metadados. Não altera população ou ração por suposição e não insere dados de exemplo em uma instalação nova. As chaves antigas permanecem guardadas. Uma falha de leitura ou gravação é exibida e não substitui registros por exemplos.
+
+Os indicadores são recalculados em memória em cada leitura do histórico com os dados existentes, sem regravar os registros brutos. O peso é obtido novamente da amostra quando ela existe; a taxa manual permanece; taxas de tabela são atualizadas pelo peso atual. Essa leitura não altera ração acumulada, população, produtos ou transferências.
 
 Para atualizar um aparelho em uso, abrir/recarregar **o mesmo endereço HTTPS no mesmo navegador**, sem limpar os dados do site. Outro domínio, preview, navegador ou aparelho usa armazenamento diferente. Não há sincronização automática entre celulares.
 

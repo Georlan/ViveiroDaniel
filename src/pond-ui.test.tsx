@@ -74,7 +74,7 @@ describe('evidence-aware operator view',()=>{
     expect(text).toContain('g em 7 dias')
     expect(text).toContain('69,00 kg')
     expect(text).toContain('Simulação pela ração')
-    expect(text).toContain('Por que o FCA não aparece?')
+    expect(text).toContain('Como o FCA estimado é calculado?')
     expect(html).toContain('FCA est.')
   })
   it('shows no growth from a single sample and preserves its recorded feed',()=>{

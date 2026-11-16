@@ -23,35 +23,35 @@ describe('biometry estimates: visible but evidence-aware', () => {
     expect(html).toContain('2,00')
     expect(html).toContain('não é FCA validado')
   })
-  it('keeps the three fields visible but does not validate inverted daily and period feed', () => {
-    const invalid = { ...measurement, currentWeightG: 328 / 70, dailyFeedKg: 152, periodFeedKg: 25, accumulatedFeedKg: 407 }
+  it('shows calculations with warnings for inverted daily and period feed', () => {
+    const invalid = { ...measurement, currentWeightG: 328 / 70, dailyFeedKg: 152, periodFeedKg: 25, accumulatedFeedKg: 407, feedRatePercent: 3.6 }
     const html = render({ ...baseline, initialPopulation: 220000 }, invalid)
     expect(html).toContain('Biomassa est.')
     expect(html).toContain('Sobrevivência est.')
     expect(html).toContain('FCA est.')
     expect(html).toContain('Ração do dia maior que o total do período')
-    expect(html).toContain('Não validada')
-    expect(html).not.toContain('4.222 kg')
+    expect(html).toContain('4.222 kg')
+    expect(html).toContain('FCA estimado =')
   })
-  it('never presents a greater-than-100% hypothesis as survival', () => {
+  it('shows greater-than-100% arithmetic with an explicit warning', () => {
     const html = render({ ...baseline, initialPopulation: 220000 }, { ...measurement, currentWeightG: 3.14, dailyFeedKg: 32, feedRatePercent: 4.5 })
     expect(html).toContain('Hipótese incompatível')
-    expect(html).toContain('Não validada')
-    expect(html).not.toContain('103%')
+    expect(html).toContain('103%')
+    expect(html).toContain('não aumento real da população')
   })
-  it('keeps the FCA ratio unavailable after a transfer without feed allocation by lot', () => {
+  it('keeps the historical ratio available after transfers with an allocation warning', () => {
     const moved = { ...baseline, populationMovements: [{
       transferId: 't1', date: '2026-07-01', direction: 'in' as const, animals: 1000,
       averageWeightG: 8, biomassKg: 8, counterpartPondId: 'other', counterpartPondName: 'V02',
     }] }
     const html = render(moved, measurement)
     expect(html).toContain('429 kg')
-    expect(html).toContain('Sem razão confiável')
-    expect(html).not.toContain('Razão do relatório antigo')
+    expect(html).toContain('não separa a ração entre os lotes')
+    expect(html).toContain('2,00')
   })
-  it('shows a missing rate rather than inventing a biomass of zero', () => {
+  it('uses the reference table when the stored rate is missing', () => {
     const html = render(baseline, { ...measurement, feedRatePercent: 0 })
-    expect(html).toContain('Sem taxa de alimentação informada')
-    expect(html).toContain('Não validada')
+    expect(html).toContain('Taxa de referência por peso aplicada automaticamente.')
+    expect(html).toContain('536 kg')
   })
 })

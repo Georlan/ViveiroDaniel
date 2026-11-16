@@ -1612,3 +1612,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .biometry-estimates-grid>div { padding: 10px; }
   .biometry-estimates-grid strong { font-size: 1.1rem; }
 }
+
+/* Histórico completo com rolagem restrita à tabela em telas pequenas. */
+.evolution-table-scroll { max-width:100%; overflow-x:auto; border:1px solid var(--line); border-radius:16px; margin:16px 0; }
+.evolution-table { width:100%; min-width:620px; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.evolution-table caption { text-align:left; padding:16px; font-weight:700; color:var(--ink); }
+.evolution-table th,.evolution-table td { padding:12px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+.evolution-table th:first-child { text-align:left; }
+.evolution-table thead th { font-size:.8rem; color:var(--muted); }
+.evolution-table tr[aria-selected="true"] { background:rgba(20,90,78,.1); }
+.evolution-table .text-button { min-height:44px; }
