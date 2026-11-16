@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import type { CalculatedBiometry, Pond } from '../types'
-import { calculateHistory, daysBetween } from '../domain/calculations'
+import { calculateHistory, daysBetween, technicalMetricsStatus } from '../domain/calculations'
 import { compareMeasurements, validMeasurement } from '../domain/biometryReview'
 import { formatDate, formatNumber, formatSigned } from '../format'
 import { FeedSimulation } from './FeedSimulation'
@@ -47,6 +47,23 @@ export function BiometryEvolution({pond,onEdit}:{pond:Pond;onEdit:(id:string)=>v
   return <section className="biometry-evolution" aria-label="Mudanças entre biometrias">
     <div className="section-heading"><div><h2>O que mudou?</h2><p>Compare as amostras e a ração entre duas datas.</p></div></div>
     <WeightChart history={history} selectedIndex={selectedIndex}/>
+    <div className="evolution-table-scroll" tabIndex={0} role="region" aria-label="Tabela de evolução das biometrias">
+      <table className="evolution-table">
+        <caption>Evolução do ciclo · estimativas recalculadas por data</caption>
+        <thead><tr><th scope="col">Data / dia</th><th scope="col">Peso (g)</th><th scope="col">Biomassa est. (kg)</th><th scope="col">Sobrev. est.</th><th scope="col">Ração acum. (kg)</th><th scope="col">FCA est.</th></tr></thead>
+        <tbody>{history.map(row => {
+          const metrics = technicalMetricsStatus(pond,row)
+          return <tr key={row.id} aria-selected={row.id === current.id}>
+            <th scope="row"><button className="text-button" onClick={() => setSelectedId(row.id)}>{formatDate(row.date).slice(0,5)} · dia {row.cultivationDay}</button></th>
+            <td>{formatNumber(row.currentWeightG,2)}</td>
+            <td>{metrics.hasCalculatedValues ? formatNumber(metrics.biomassKg!,0) : '—'}</td>
+            <td>{metrics.hasCalculatedValues && metrics.maximumBiomassKg > 0 ? formatNumber(metrics.survivalPercent!,0)+'%' : '—'}</td>
+            <td>{formatNumber(row.accumulatedFeedKg,2)}</td>
+            <td>{metrics.hasCalculatedValues && metrics.feedToStandingBiomassRatio !== null ? formatNumber(metrics.feedToStandingBiomassRatio,2) : '—'}</td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
     <div className="interval-picker">
       <label><span>Comparar intervalo terminado em</span><select value={current.id} onChange={event=>setSelectedId(event.target.value)}>{history.slice(1).map(row=><option key={row.id} value={row.id}>{formatDate(row.date)} · {formatNumber(row.currentWeightG,2)} g</option>)}</select></label>
       <div className="interval-navigation"><button className="secondary-button" disabled={selectedIndex<=1} onClick={()=>setSelectedId(history[selectedIndex-1].id)} aria-label="Comparar intervalo anterior">‹ Anterior</button><span>{selectedIndex} de {history.length-1}</span><button className="secondary-button" disabled={selectedIndex>=history.length-1} onClick={()=>setSelectedId(history[selectedIndex+1].id)} aria-label="Comparar próximo intervalo">Próximo ›</button></div>

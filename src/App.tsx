@@ -1,6 +1,7 @@
 import { FormEvent, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   accumulatedFeedFromPeriod,
+  feedRateFromWeightTable,
   averageWeightFromSample,
   biomassFromAnimals,
   calculateBiometry,
@@ -386,6 +387,8 @@ export function PondCard({
         {latest ? (
           <div className="pond-card-readings">
             <div><span>Peso médio</span><strong>{formatNumber(latest.currentWeightG, 2)} <small>g</small></strong></div>
+            <div><span>Biomassa est.</span><strong>{latestTechnical?.hasCalculatedValues ? formatNumber(latestTechnical.biomassKg!,0)+' kg' : '—'}</strong></div>
+            <div><span>FCA est.</span><strong>{latestTechnical?.hasCalculatedValues && latestTechnical.feedToStandingBiomassRatio !== null ? formatNumber(latestTechnical.feedToStandingBiomassRatio,2) : '—'}</strong></div>
             <div><span>Última pesagem</span><strong className="reading-date">{formatDate(latest.date).slice(0, 5)}</strong></div>
           </div>
         ) : (
@@ -426,6 +429,7 @@ export function PondDetail({
       <div className="pond-header-card">
         <div className="pond-hero-top"><span>Ciclo {pond.cycle}</span><span>Desde {formatDate(pond.stockingDate).slice(0, 5)}</span></div>
         <div className="pond-hero-main"><div><strong>{latest ? formatNumber(latest.currentWeightG,2) : String(cultivationDays)}<small>{latest ? ' g' : ' dias'}</small></strong><span>{latest ? 'última amostra · '+formatDate(latest.date).slice(0,5) : 'sem pesagem registrada'}</span></div><img src="/assets/pond.svg" width="112" height="76" alt="" /></div>
+        <p className="pond-context-caption">{cultivationDays} dias de cultivo · {history.length} biometrias registradas</p>
         <div className="pond-density-readout"><span>Animais por área</span><strong>{formatNumber(densityPerSquareMeter(pond,populationInControl),1)} <small>animais/m²</small></strong></div>
         <p className="pond-context-caption">Saldo cadastral: {formatNumber(populationInControl)} animais <span>Área: {formatAreaSquareMeters(pond.areaHa)} m²</span></p>
       </div>
@@ -1042,7 +1046,7 @@ function SimpleBiometryForm({
     sampleCount: initial?.sampleCount != null ? String(initial.sampleCount) : '',
     dailyFeedKg: initial ? String(initial.dailyFeedKg) : '',
     periodFeedKg: initial?.periodFeedKg != null ? String(initial.periodFeedKg) : '',
-    feedRatePercent: initial && initial.feedRatePercent>0 ? String(initial.feedRatePercent) : '',
+    feedRatePercent: initial && initial.feedRatePercent>0 && initial.feedRateSource !== 'table' ? String(initial.feedRatePercent) : '',
   })
 
   const draftPrevious = [...historyWithoutInitial]
@@ -1053,9 +1057,10 @@ function SimpleBiometryForm({
   const sampleTotalWeightG = Number(form.sampleTotalWeightG)
   const sampleCount = Number(form.sampleCount)
   const currentWeightG = averageWeightFromSample(sampleTotalWeightG, sampleCount)
+  const tableRate = feedRateFromWeightTable(currentWeightG)?.ratePercent ?? 0
   const effectiveRate = form.feedRatePercent.trim()
     ? Number(form.feedRatePercent)
-    : 0
+    : tableRate
   const periodFeedKg = Number(form.periodFeedKg)
   const accumulatedFeedKg = accumulatedFeedFromPeriod(
     draftPrevious?.accumulatedFeedKg ?? 0,
@@ -1070,7 +1075,7 @@ function SimpleBiometryForm({
           date: form.date,
           currentWeightG,
           feedRatePercent: effectiveRate,
-          feedRateSource: initial && effectiveRate===initial.feedRatePercent ? initial.feedRateSource : 'manual',
+          feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
           dailyFeedKg: Number(form.dailyFeedKg),
           accumulatedFeedKg,
           sampleTotalWeightG,
@@ -1137,7 +1142,7 @@ function SimpleBiometryForm({
       date: form.date,
       currentWeightG,
       feedRatePercent: effectiveRate,
-      feedRateSource: initial && effectiveRate===initial.feedRatePercent ? initial.feedRateSource : 'manual',
+      feedRateSource: form.feedRatePercent.trim() ? 'manual' : 'table',
       dailyFeedKg: Number(form.dailyFeedKg),
       accumulatedFeedKg,
       sampleTotalWeightG,
@@ -1268,12 +1273,12 @@ function SimpleBiometryForm({
         )}
 
         <details className="technical-adjustment">
-          <summary><span><strong>Simulação de estoque pela ração</strong><small>Opcional • usa uma taxa assumida</small></span><b>{effectiveRate>0?formatNumber(effectiveRate,2)+'%':'Sem taxa'}</b></summary>
+          <summary><span><strong>Simulação de estoque pela ração</strong><small>Referência por peso • ajuste se necessário</small></span><b>{effectiveRate>0?formatNumber(effectiveRate,2)+'%':'Sem taxa'}</b></summary>
           <div className="technical-adjustment-body">
-            <p>Sem espécie, sistema e ração confirmados, o aplicativo não aplica uma taxa automaticamente. Você pode salvar a biometria sem esta simulação.</p>
+            <p>A tabela de referência por peso é aplicada automaticamente. Uma taxa informada aqui tem prioridade. Fora da faixa de 0,2 a 30 g, informe a taxa usada no manejo para calcular as estimativas.</p>
             {initial?.feedRatePercent ? <p>Taxa registrada anteriormente: {formatNumber(initial.feedRatePercent,2)}%. Confirme antes de reutilizar.</p>:null}
-            <Field label="Taxa assumida de alimentação (%)"><input type="number" min="0.01" max="100" step="any" inputMode="decimal" placeholder="Informe apenas se conhecer a taxa" value={form.feedRatePercent} onChange={event=>{setForm({...form,feedRatePercent:event.target.value});setError('')}}/></Field>
-            {form.feedRatePercent && <button type="button" className="inline-reset-button" onClick={()=>setForm({...form,feedRatePercent:''})}>Salvar sem taxa</button>}
+            <Field label="Taxa assumida de alimentação (%)"><input type="number" min="0.01" max="100" step="any" inputMode="decimal" placeholder={tableRate > 0 ? formatNumber(tableRate,2)+'% pela tabela' : 'Informe a taxa usada'} value={form.feedRatePercent} onChange={event=>{setForm({...form,feedRatePercent:event.target.value});setError('')}}/></Field>
+            {form.feedRatePercent && <button type="button" className="inline-reset-button" onClick={()=>setForm({...form,feedRatePercent:''})}>Usar taxa da tabela</button>}
             <FeedReferencePanel weightG={currentWeightG}/>
           </div>
         </details>
@@ -1281,6 +1286,7 @@ function SimpleBiometryForm({
         </>}
         {error && <div className="form-error" role="alert">{error}</div>}
 
+        {step === 1 && preview && <BiometryEstimates pond={pond} current={preview} previous={draftPrevious}/>}
         {step === 1 && preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
           <p className="form-estimate-warning" role="status">
             Estimativas sob revisão. Confira ração e taxa antes de usar esses indicadores.
@@ -1457,6 +1463,7 @@ function LegacyBiometryEditForm({
 
         {error && <div className="form-error">{error}</div>}
 
+        {preview && <BiometryEstimates pond={pond} current={preview} previous={draftPrevious}/>}
         {preview && previewTechnical?.hasCalculatedValues && !previewTechnical.isPlausible && (
           <p className="form-estimate-warning" role="status">Estimativas sob revisão. Confira ração e taxa.</p>
         )}

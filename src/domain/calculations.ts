@@ -103,7 +103,7 @@ export function accumulatedFeedFromPeriod(previousAccumulatedKg: number, periodF
   return Math.max(0, previousAccumulatedKg) + Math.max(0, periodFeedKg)
 }
 
-/** Referência legada, sem procedência validada; não aplicar automaticamente. */
+/** Referência de manejo por peso já presente no app. Os resultados são estimativas. */
 export const FEED_RATE_BY_WEIGHT = [
   { weightG: 0.2, ratePercent: 8.6 },
   { weightG: 0.5, ratePercent: 7.6 },
@@ -141,6 +141,7 @@ export const FEED_RATE_BY_WEIGHT = [
 
 export function feedRateFromWeightTable(currentWeightG: number) {
   if (
+    !Number.isFinite(currentWeightG) ||
     currentWeightG < FEED_RATE_BY_WEIGHT[0].weightG ||
     currentWeightG > FEED_RATE_BY_WEIGHT[FEED_RATE_BY_WEIGHT.length - 1].weightG
   ) {
@@ -152,6 +153,26 @@ export function feedRateFromWeightTable(currentWeightG: number) {
     const itemDistance = Math.abs(item.weightG - currentWeightG)
     return itemDistance < nearestDistance ? item : nearest
   })
+}
+
+/** Taxa explícita tem prioridade; ausência usa a referência por peso, sem extrapolar. */
+export function effectiveFeedRatePercent(weightG: number, recordedRate: number) {
+  if (Number.isFinite(recordedRate) && recordedRate > 0 && recordedRate <= 100) return recordedRate
+  return recordedRate === 0 ? feedRateFromWeightTable(weightG)?.ratePercent ?? 0 : 0
+}
+
+export function recalculateBiometryInput(input: BiometryInput): BiometryInput {
+  const hasSample = Number.isFinite(input.sampleTotalWeightG) && input.sampleTotalWeightG! > 0 &&
+    Number.isInteger(input.sampleCount) && input.sampleCount! > 0
+  const currentWeightG = hasSample
+    ? averageWeightFromSample(input.sampleTotalWeightG!, input.sampleCount!) : input.currentWeightG
+  const useTable = input.feedRateSource === 'table' || input.feedRatePercent === 0
+  const tableRate = useTable ? feedRateFromWeightTable(currentWeightG)?.ratePercent : undefined
+  return {
+    ...input, currentWeightG,
+    feedRatePercent: useTable ? tableRate ?? 0 : input.feedRatePercent,
+    feedRateSource: tableRate ? 'table' : input.feedRateSource,
+  }
 }
 
 export function suggestFeedRatePercent(
@@ -263,7 +284,8 @@ export function technicalMetricsStatus(
     : pond.initialPopulation
   const maximumBiomassKg = theoreticalBiomassAt100Kg({ initialPopulation: population }, input.currentWeightG)
 
-  if (input.feedRatePercent <= 0) {
+  const ratePercent = effectiveFeedRatePercent(input.currentWeightG, input.feedRatePercent)
+  if (ratePercent <= 0) {
     return {
       hasFeedRate: false,
       hasCalculatedValues: false,
@@ -277,27 +299,25 @@ export function technicalMetricsStatus(
     }
   }
 
-  const feedRate = input.feedRatePercent / 100
+  const feedRate = ratePercent / 100
   const feedFor100Kg = maximumBiomassKg * feedRate
   const biomassKg = input.dailyFeedKg / feedRate
   const survivalPercent = feedFor100Kg > 0 ? (input.dailyFeedKg / feedFor100Kg) * 100 : 0
-  // Sem histórico de ração atribuído a cada lote, o consumo acumulado
-  // não pode ser dividido apenas pela biomassa atual após transferências.
-  const hasTransfers = !!input.date && (pond.populationMovements ?? []).some(
-    (movement) => movement.date <= input.date!,
-  )
-  const feedToStandingBiomassRatio = hasTransfers ? null : biomassKg > 0 ? input.accumulatedFeedKg / biomassKg : null
+  // Razão do relatório: permanece disponível após transferência, como estimativa,
+  // sem afirmar que houve apuração independente de ganho por lote.
+  const feedToStandingBiomassRatio = biomassKg > 0 && Number.isFinite(input.accumulatedFeedKg) &&
+    input.accumulatedFeedKg >= 0 ? input.accumulatedFeedKg / biomassKg : null
   const tolerance = 0.000001
   // Um cálculo pode existir matematicamente, mesmo sem validar a hipótese de taxa.
   // Separar disponibilidade de plausibilidade evita deixar o painel sem informação.
   const hasCalculatedValues =
     input.dailyFeedKg > 0 &&
-    maximumBiomassKg > 0 &&
+    Number.isFinite(input.currentWeightG) && input.currentWeightG > 0 &&
     Number.isFinite(biomassKg) &&
     Number.isFinite(survivalPercent) &&
     (feedToStandingBiomassRatio === null || Number.isFinite(feedToStandingBiomassRatio))
   const isPlausible =
-    hasCalculatedValues &&
+    hasCalculatedValues && maximumBiomassKg > 0 &&
     biomassKg <= maximumBiomassKg + tolerance &&
     survivalPercent <= 100 + tolerance
 
@@ -320,6 +340,7 @@ export function calculateBiometry(
   previousWeightG: number | null,
   previousDate?: string | null,
 ): CalculatedBiometry {
+  input = recalculateBiometryInput(input)
   const cultivationDay = Math.max(1, daysBetween(pond.stockingDate, input.date) + 1)
   const feedRate = input.feedRatePercent / 100
 
@@ -358,13 +379,8 @@ export function calculateBiometry(
 export function calculateHistory(pond: Pond) {
   // Leitura não reconstrói os acumulados: valores contraditórios são evidência
   // que o operador precisa revisar. A normalização da cadeia é explícita ao salvar.
-  const ordered = [...pond.biometries].sort((a,b)=>a.date.localeCompare(b.date)).map(input=>({
-    ...input,
-    currentWeightG: input.sampleTotalWeightG!=null && input.sampleCount!=null &&
-      Number.isFinite(input.sampleTotalWeightG) && input.sampleTotalWeightG>0 &&
-      Number.isInteger(input.sampleCount) && input.sampleCount>0
-      ? averageWeightFromSample(input.sampleTotalWeightG,input.sampleCount) : input.currentWeightG,
-  }))
+  const ordered = [...pond.biometries].sort((a,b)=>a.date.localeCompare(b.date))
+    .map(recalculateBiometryInput)
   return ordered.map((input, index) =>
     calculateBiometry(
       pond,

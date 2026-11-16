@@ -262,7 +262,7 @@ describe('pond calculations', () => {
     expect(compareBiometriesForDisplay(previous, current).weightG).toBe(0.87)
   })
 
-  it('allows a first biometry without inventing a feed rate', () => {
+  it('uses the existing weight reference when the first biometry has no rate', () => {
     const status = technicalMetricsStatus(v01, {
       currentWeightG: 5.14,
       feedRatePercent: 0,
@@ -270,11 +270,11 @@ describe('pond calculations', () => {
       accumulatedFeedKg: 99,
     })
 
-    expect(status.hasFeedRate).toBe(false)
-    expect(status.isPlausible).toBe(false)
+    expect(status.hasFeedRate).toBe(true)
+    expect(status.isPlausible).toBe(true)
     expect(status.maximumBiomassKg).toBeCloseTo(1130.8, 1)
-    expect(status.biomassKg).toBeNull()
-    expect(status.survivalPercent).toBeNull()
+    expect(status.biomassKg).toBeCloseTo(555.56, 1)
+    expect(status.survivalPercent).toBeCloseTo(49.13, 1)
   })
 
   it('rejects technical results that imply more than 100% survival', () => {
